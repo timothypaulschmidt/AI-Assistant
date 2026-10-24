@@ -44,14 +44,14 @@ Open Git Bash and run:
 ```bash
 git --version
 git config --global --list
-git config --global user.name "timothypaulschmidt@gmail.com"
-git config --global user.email "your.email@example.com"
+git config --global user.name "timothypaulschmidt"
+git config --global user.email "timothypaulschmidt@gmail.com"
 git config --global --list
 ```
 
 ### 3. Initialize Git in Your Project
 ```bash
-cd C:\Users\timschmidt\Documents\Projects\AI-Assistant
+cd C:/Users/timschmidt/Documents/Projects/AI-Assistant
 git init
 ```
 
@@ -75,7 +75,7 @@ git commit -m "Initial commit: project setup"
 ### 6. Connect Local Project to GitHub
 Replace with your actual username/repo:
 ```bash
-git remote add origin https://github.com/timothypaulschmidt@gmail.com/AI-Assistant.git
+git remote add origin https://github.com/timothypaulschmidt/AI-Assistant.git
 git branch -M main
 git push -u origin main
 ```
