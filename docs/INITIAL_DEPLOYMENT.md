@@ -4,34 +4,46 @@
 Your project is located at: `C:\Users\timschmidt\Documents\Projects\AI-Assistant`
 
 ## Python Project Developer
-*Assumes you have Python installed as developer*
+*Assumes you have Python 3.10 or newer installed as developer*
 
 1. Open a terminal, navigate to project:
-   ```bash
+   ```bat
    cd C:\Users\timschmidt\Documents\Projects\AI-Assistant
    ```
 
 2. Setup a virtual environment:
-   ```bash
-   python -m venv venv
+   ```bat
+   python -m venv .venv
    ```
 
-3. Activate it:
-   ```bash
-   venv\Scripts\activate
+3. Activate it (the prompt should start with `(.venv)`):
+   ```bat
+   .venv\Scripts\activate.bat
    ```
 
-4. Install project dependencies (they go to `<your project>\venv\Lib\site-packages`):
-   ```bash
-   pip install pandas  # Example
+4. Install the project dependencies and the project itself (libraries go to `<your project>\.venv\Lib\site-packages`):
+   ```bat
+   pip install -r requirements-dev.txt
+   pip install -e .
+   ```
+   `pip install -e .` makes the `ai_assistant` package importable from `src\`. It is a one-time step per virtual environment.
+
+5. Run the tests (all of them should pass):
+   ```bat
+   pytest
    ```
 
-5. Add code to `\src\main.py`, add functions to `\src\utils` and test files to `\tests`
-
-6. Save dependencies:
-   ```bash
-   pip freeze > requirements.txt
+6. Run the app (get a free key at https://aistudio.google.com/app/apikey) and open http://localhost:8000:
+   ```bat
+   set GEMINI_API_KEY=your-key
+   set OLLAMA_BASE_URL=http://localhost:11434
+   uvicorn ai_assistant.web.main:app --reload --port 8000
    ```
+   Never save your key in a file inside the project or commit it.
+
+7. Where the code goes: `src\ai_assistant\` holds the code (`config.py`, `llm\` for the model providers and router, `web\` for the FastAPI app and chat page). Test files go in `tests\`.
+
+8. To add a package, add a line to `requirements.txt` (or `requirements-dev.txt` for test tools) by hand, then run `pip install -r requirements-dev.txt`. Do **not** run `pip freeze > requirements.txt`: it would replace the curated list with every package installed on the machine.
 
 ## GitHub Source
 *Assumes you created a GitHub Account*
@@ -56,8 +68,11 @@ git init
 ```
 
 ### 4. Make Your First Commit
-Everything except what's in `.gitignore`:
+Everything except what's in `.gitignore`. Run `git status` first and check that `.venv` and `.env` are **not** listed:
 ```bash
+# See what will be added
+git status
+
 # Add all files to staging
 git add .
 
@@ -87,62 +102,66 @@ git push -u origin main
 Download from: https://www.docker.com/products/docker-desktop/
 
 ### 2. Verify Installation
-```bash
+```bat
 docker --version
 ```
 
 ### 3. Navigate to Project
-```bash
+```bat
 cd C:\Users\timschmidt\Documents\Projects\AI-Assistant
 ```
 
 ### 4. Understanding Docker Files
-These files were already added by the setup script:
+These files are in the project:
 
-**Dockerfile** - Instructions for building your Docker image:
+**Dockerfile** - Instructions for building your Docker image (simplified):
 ```dockerfile
-FROM python:3.11-slim          # Start with Python 3.11
-WORKDIR /app                   # Set working directory
-COPY requirements.txt .        # Copy requirements first
-RUN pip install ...            # Install dependencies
-COPY src/ ./src/               # Copy your code
-CMD ["python", "src/main.py"]  # Run your app
+FROM python:3.12-slim                 # Start with Python 3.12
+ENV PYTHONPATH=/srv/src               # So `ai_assistant` can be imported
+WORKDIR /srv                          # Set working directory
+COPY requirements.txt .               # Copy requirements first (better caching)
+RUN pip install -r requirements.txt   # Install dependencies
+COPY src ./src                        # Copy your code
+CMD ["uvicorn", "ai_assistant.web.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 **.dockerignore** - Tells Docker what NOT to copy (like .gitignore but for Docker)
 
 ### 5. Build the Docker Image
 Must be in lowercase:
-```bash
+```bat
 docker build -t ai-assistant:dev .
-# docker build -t ai-assistant:dev --platform linux/amd64,linux/arm64 .
 ```
+(Optional, for ARM machines later: `docker build -t ai-assistant:dev --platform linux/amd64,linux/arm64 .`)
 
 ### 6. Run It
-Add the `-it` flags for interactive mode:
-- `-i` = interactive (keeps STDIN open so you can type input)
-- `-t` = tty (allocates a pseudo-terminal)
+This is a web server, so you don't need `-it`. You need `-p` to reach it from your browser and `-e` to pass settings:
+- `-p 8000:8000` = open container port 8000 on your computer's port 8000
+- `-e NAME=value` = set an environment variable inside the container
+- `--rm` = delete the container when it stops
 
-```bash
-docker run --rm -p 8000:8000 `
-  -e GEMINI_API_KEY=your-key `
-  -e OLLAMA_BASE_URL=http://host.docker.internal:11434 `
-  ai-assistant:dev
+In `cmd.exe`:
+```bat
+docker run --rm -p 8000:8000 -e GEMINI_API_KEY=your-key -e OLLAMA_BASE_URL=http://host.docker.internal:11434 ai-assistant:dev
 ```
+In PowerShell, replace each line break with a backtick (`` ` ``) if you split the command across lines.
+
+Then open http://localhost:8000.
 
 ### 7. Tag Your Image for Docker Hub
-```bash
-docker tag ai-assistant ai-assistant:dev
+Docker Hub names look like `username/repository` (your Docker Hub username, **not** an email address):
+```bat
+docker tag ai-assistant:dev timothypaulschmidt/ai-assistant:dev
 ```
 
 ### 8. Login to Docker Hub
-```bash
+```bat
 docker login
 ```
 
 ### 9. Push Your Image
-```bash
-docker push ai-assistant:dev
+```bat
+docker push timothypaulschmidt/ai-assistant:dev
 ```
 
 ---
@@ -153,41 +172,43 @@ docker push ai-assistant:dev
 Download from: https://git-scm.com/download/win
 
 ### 2. Navigate to Projects Folder
-```bash
+```bat
 cd C:\Users\YourUsername\Documents\Projects
 ```
 
 ### 3. Clone the Repository
-```bash
-git clone https://github.com/timothypaulschmidt@gmail.com/AI-Assistant.git
+```bat
+git clone https://github.com/timothypaulschmidt/AI-Assistant.git
 ```
 
 ## Python Project User (2nd Computer)
-*Assumes you have Python installed*
+*Assumes you have Python 3.10 or newer installed*
 
 1. Open a terminal:
-   ```bash
+   ```bat
    cd C:\Users\YourUsername\Documents\Projects\AI-Assistant
    ```
 
 2. Setup a virtual environment:
-   ```bash
-   python -m venv venv
+   ```bat
+   python -m venv .venv
    ```
 
 3. Activate it:
-   ```bash
-   venv\Scripts\activate
+   ```bat
+   .venv\Scripts\activate.bat
    ```
 
-4. Install project dependencies:
-   ```bash
-   pip install -r requirements.txt
+4. Install project dependencies and the project itself:
+   ```bat
+   pip install -r requirements-dev.txt
+   pip install -e .
    ```
 
-5. Run code:
-   ```bash
-   python src/main.py
+5. Run the app and open http://localhost:8000:
+   ```bat
+   set GEMINI_API_KEY=your-key
+   uvicorn ai_assistant.web.main:app --reload --port 8000
    ```
 
 ---
@@ -199,33 +220,33 @@ Download from: https://www.docker.com/products/docker-desktop/
 *You don't need an account to use it*
 
 ### 2. Verify Installation
-```bash
+```bat
 docker --version
 ```
 
 ### 3. Pull Your Image
-```bash
-docker pull timothypaulschmidt@gmail.com/ai-assistant
+```bat
+docker pull timothypaulschmidt/ai-assistant:dev
 ```
 
 ### 4. Run It
-Add the `-it` flags for interactive mode:
-```bash
-docker run -it timothypaulschmidt@gmail.com/ai-assistant
+```bat
+docker run --rm -p 8000:8000 -e GEMINI_API_KEY=your-key -e OLLAMA_BASE_URL=http://host.docker.internal:11434 timothypaulschmidt/ai-assistant:dev
 ```
+Then open http://localhost:8000.
 
 ---
 
 ## Summary
 
 ### Initial Deployment (Without Docker)
-1. Python: venv → activate → install dependencies → freeze
+1. Python: venv → activate → install requirements → `pip install -e .` → test
 2. GitHub: Commit → Push
 3. Other Computer: GitHub Clone
-4. Other Computer: Python → venv → activate → install requirements
+4. Other Computer: Python → venv → activate → install requirements → `pip install -e .`
 
 ### Initial Deployment (With Docker)
-1. Python: venv → activate → install dependencies → freeze
+1. Python: venv → activate → install requirements → `pip install -e .` → test
 2. GitHub: Commit → Push
 3. Docker: Build image → Tag → Push to Docker Hub
-4. Other Computer: Docker Pull → Run
+4. Other Computer: Docker Pull → Run (with `-p` and `-e`)
