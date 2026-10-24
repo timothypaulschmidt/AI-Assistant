@@ -1,5 +1,8 @@
 # Don't copy these to Docker image
 venv/
+.venv/
+*.egg-info/
+.pytest_cache/
 __pycache__/
 *.pyc
 *.pyo

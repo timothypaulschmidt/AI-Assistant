@@ -13,39 +13,46 @@ Every update cycle:
 ### On Your Source Computer (Development Machine)
 
 #### 1. Make Changes to Your Python Code
-Edit your files in your IDE (VS Code, Spyder, etc.)
+Edit your files in your IDE (VS Code, Spyder, etc.). The code is in `src\ai_assistant\`.
 
-#### 2. Test Locally (Optional)
-```bash
-venv\Scripts\activate
-python src/main.py
+#### 2. Test Locally
+```bat
+.venv\Scripts\activate.bat
+pytest
+set GEMINI_API_KEY=your-key
+uvicorn ai_assistant.web.main:app --reload --port 8000
 ```
+Then open http://localhost:8000.
 
 #### 3. Update Requirements (If You Added Packages)
-```bash
-pip freeze > requirements.txt
+Add the package to `requirements.txt` by hand (or `requirements-dev.txt` for test tools), then install it:
+```bat
+pip install -r requirements-dev.txt
 ```
+Do **not** run `pip freeze > requirements.txt`: it would overwrite the curated list with every package installed on your machine.
 
 #### 4. Commit and Push to GitHub
-```bash
+```bat
+git status
 git add .
 git commit -m "Bugfix: description of what you fixed"
 git push origin main
 ```
 
 #### 5. Rebuild Your Docker Image
-```bash
-docker build -t ai-assistant .
+```bat
+docker build -t ai-assistant:dev .
 ```
 
 #### 6. Tag It for Docker Hub
-```bash
-docker tag ai-assistant timothypaulschmidt@gmail.com/ai-assistant
+Docker Hub names are `username/repository` (your username, not your email):
+```bat
+docker tag ai-assistant:dev timothypaulschmidt/ai-assistant:dev
 ```
 
 #### 7. Push to Docker Hub
-```bash
-docker push timothypaulschmidt@gmail.com/ai-assistant
+```bat
+docker push timothypaulschmidt/ai-assistant:dev
 ```
 
 ---
@@ -55,74 +62,73 @@ docker push timothypaulschmidt@gmail.com/ai-assistant
 #### Option A: Using Python/GitHub Only
 
 1. Navigate to project:
-   ```bash
+   ```bat
    cd C:\Users\YourUsername\Documents\Projects\AI-Assistant
    ```
 
 2. Pull latest changes:
-   ```bash
+   ```bat
    git pull origin main
    ```
 
 3. Activate venv:
-   ```bash
-   venv\Scripts\activate
+   ```bat
+   .venv\Scripts\activate.bat
    ```
 
 4. Update dependencies (if requirements.txt changed):
-   ```bash
-   pip install -r requirements.txt
+   ```bat
+   pip install -r requirements-dev.txt
+   pip install -e .
    ```
 
-5. Run the updated code:
-   ```bash
-   python src/main.py
+5. Run the updated code and open http://localhost:8000:
+   ```bat
+   set GEMINI_API_KEY=your-key
+   uvicorn ai_assistant.web.main:app --reload --port 8000
    ```
 
 #### Option B: Using Docker Only
 
 1. Pull the updated image:
-   ```bash
-   docker pull timothypaulschmidt@gmail.com/ai-assistant
+   ```bat
+   docker pull timothypaulschmidt/ai-assistant:dev
    ```
 
-2. Run the new version:
-   ```bash
-   docker run -it timothypaulschmidt@gmail.com/ai-assistant
+2. Run the new version (`-p` makes it reachable from your browser, `-e` passes settings):
+   ```bat
+   docker run --rm -p 8000:8000 -e GEMINI_API_KEY=your-key -e OLLAMA_BASE_URL=http://host.docker.internal:11434 timothypaulschmidt/ai-assistant:dev
    ```
+   Then open http://localhost:8000.
 
 ---
 
 ## Pro Tips
 
 ### Version Tagging
-Instead of always using `latest`, you can version your Docker images:
+Instead of always using one moving tag like `dev`, you can version your Docker images so you always know what is running:
 
-```bash
-# On source computer
-docker build -t ai-assistant .
-docker tag ai-assistant timothypaulschmidt@gmail.com/ai-assistant:v1.0
-docker tag ai-assistant timothypaulschmidt@gmail.com/ai-assistant:latest
-docker push timothypaulschmidt@gmail.com/ai-assistant:v1.0
-docker push timothypaulschmidt@gmail.com/ai-assistant:latest
+```bat
+rem On source computer
+docker build -t ai-assistant:v0.1.0 .
+docker tag ai-assistant:v0.1.0 timothypaulschmidt/ai-assistant:v0.1.0
+docker push timothypaulschmidt/ai-assistant:v0.1.0
 ```
 
 Then on destination:
-```bash
-# Pull specific version
-docker pull timothypaulschmidt@gmail.com/ai-assistant:v1.0
-docker run -it timothypaulschmidt@gmail.com/ai-assistant:v1.0
-
-# Or always get latest
-docker pull timothypaulschmidt@gmail.com/ai-assistant:latest
-docker run -it timothypaulschmidt@gmail.com/ai-assistant:latest
+```bat
+rem Pull and run a specific version
+docker pull timothypaulschmidt/ai-assistant:v0.1.0
+docker run --rm -p 8000:8000 -e GEMINI_API_KEY=your-key timothypaulschmidt/ai-assistant:v0.1.0
 ```
 
 ### Git Best Practices
 - Use descriptive commit messages
 - Commit often (small, logical changes)
-- Test before committing
+- Run `pytest` before committing
+- Run `git status` before `git add .` and check that no `.venv` or `.env` files are listed
 - Always pull before pushing if working on multiple computers
+- Never commit API keys
 
 ### Docker Best Practices
 - Rebuild image after any code changes
