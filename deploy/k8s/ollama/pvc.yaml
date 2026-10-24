@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-models
+  labels:
+    app.kubernetes.io/name: ollama
+spec:
+  accessModes:
+    - ReadWriteOnce
+  # No storageClassName: uses the cluster default (k3s: local-path). Other
+  # clusters (AWS, Azure, GCP) get their own default disk type.
+  resources:
+    requests:
+      storage: 50Gi

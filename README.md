@@ -66,6 +66,12 @@ docker run --rm -p 8000:8000 `
 1. Tag: `docker tag ai-assistant:dev timothypaulschmidt/ai-assistant:dev`
 2. Push: `docker push timothypaulschmidt/ai-assistant:dev`
 
+## Deploy to k3s
+
+Kubernetes manifests for the assistant and a CPU-only Ollama are in `deploy/k8s`.
+Step-by-step instructions (build and push the image, create the Secret, apply,
+pull a model, update and roll back) are in [deploy/README.md](deploy/README.md).
+
 ## Configuration (environment variables)
 
 | Variable | Default | Meaning |
@@ -156,6 +162,7 @@ src/ai_assistant/
     main.py            FastAPI: /, /api/chat (SSE), /api/status, /healthz
     static/index.html  the chat page
 tests/                 router, provider and API tests
+deploy/k8s/            Kubernetes manifests (see deploy/README.md)
 ```
 
 `llm/` is shared code: the chat page uses it now, and the future agent, RAG and
