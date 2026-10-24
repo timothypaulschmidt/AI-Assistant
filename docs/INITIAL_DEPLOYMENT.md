@@ -115,6 +115,7 @@ CMD ["python", "src/main.py"]  # Run your app
 Must be in lowercase:
 ```bash
 docker build -t ai-assistant .
+# docker build -t ai-assistant --platform linux/amd64,linux/arm64 .
 ```
 
 ### 6. Run It
