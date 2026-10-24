@@ -63,8 +63,8 @@ docker run --rm -p 8000:8000 `
 ```
 
 ## Push to Docker Hub
-1. Tag: `docker tag ai-assistant timothypaulschmidt@gmail.com/ai-assistant`
-2. Push: `docker push timothypaulschmidt@gmail.com/ai-assistant`
+1. Tag: `docker tag ai-assistant:dev timothypaulschmidt/ai-assistant:dev`
+2. Push: `docker push timothypaulschmidt/ai-assistant:dev`
 
 ## Configuration (environment variables)
 

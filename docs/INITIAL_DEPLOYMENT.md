@@ -114,8 +114,8 @@ CMD ["python", "src/main.py"]  # Run your app
 ### 5. Build the Docker Image
 Must be in lowercase:
 ```bash
-docker build -t ai-assistant .
-# docker build -t ai-assistant --platform linux/amd64,linux/arm64 .
+docker build -t ai-assistant:dev .
+# docker build -t ai-assistant:dev --platform linux/amd64,linux/arm64 .
 ```
 
 ### 6. Run It
@@ -124,12 +124,15 @@ Add the `-it` flags for interactive mode:
 - `-t` = tty (allocates a pseudo-terminal)
 
 ```bash
-docker run -it ai-assistant
+docker run --rm -p 8000:8000 `
+  -e GEMINI_API_KEY=your-key `
+  -e OLLAMA_BASE_URL=http://host.docker.internal:11434 `
+  ai-assistant:dev
 ```
 
 ### 7. Tag Your Image for Docker Hub
 ```bash
-docker tag ai-assistant timothypaulschmidt@gmail.com/ai-assistant
+docker tag ai-assistant ai-assistant:dev
 ```
 
 ### 8. Login to Docker Hub
@@ -139,7 +142,7 @@ docker login
 
 ### 9. Push Your Image
 ```bash
-docker push timothypaulschmidt@gmail.com/ai-assistant
+docker push ai-assistant:dev
 ```
 
 ---
