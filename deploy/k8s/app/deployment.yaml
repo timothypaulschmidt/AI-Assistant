@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-assistant
+  labels:
+    app.kubernetes.io/name: ai-assistant
+spec:
+  # Keep this at 1: which Gemini models are cooling down is remembered in the
+  # process, so several copies would each learn it separately.
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-assistant
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ai-assistant
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        # Matches `useradd --uid 10001 appuser` in the Dockerfile. Kubernetes
+        # needs the number to verify the container is not root.
+        runAsUser: 10001
+      containers:
+        - name: ai-assistant
+          # The tag is set in ../kustomization.yaml (images:)
+          image: timothypaulschmidt/ai-assistant
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: ai-assistant-config
+            - secretRef:
+                # Created by hand so the key never goes into git:
+                #   kubectl -n ai-assistant create secret generic gemini-api-key \
+                #     --from-literal=GEMINI_API_KEY=...
+                name: gemini-api-key
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault

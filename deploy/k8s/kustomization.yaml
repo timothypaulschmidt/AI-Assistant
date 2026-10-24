@@ -1,0 +1,29 @@
+# Apply everything with:  kubectl apply -k deploy/k8s
+# (create the namespace and the gemini-api-key Secret first; see deploy/README.md)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ai-assistant
+
+resources:
+  - namespace.yaml
+  - app/deployment.yaml
+  - app/service.yaml
+  - ollama/pvc.yaml
+  - ollama/deployment.yaml
+  - ollama/service.yaml
+
+# Settings for the assistant. Kustomize adds a hash to the ConfigMap name, so
+# changing app/config.env and re-applying restarts the pod with the new values.
+configMapGenerator:
+  - name: ai-assistant-config
+    envs:
+      - app/config.env
+
+# The image tags live here, in one place. To deploy a new version, push the
+# image to Docker Hub, change newTag below, and run kubectl apply -k again.
+images:
+  - name: timothypaulschmidt/ai-assistant
+    newTag: v0.1.0
+  - name: ollama/ollama
+    newTag: 0.40.10
