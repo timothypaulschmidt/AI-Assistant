@@ -24,6 +24,6 @@ configMapGenerator:
 # image to Docker Hub, change newTag below, and run kubectl apply -k again.
 images:
   - name: timothypaulschmidt/ai-assistant
-    newTag: v0.2.0
+    newTag: v0.2.1
   - name: ollama/ollama
     newTag: 0.40.10

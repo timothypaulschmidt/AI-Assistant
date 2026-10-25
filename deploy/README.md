@@ -42,9 +42,9 @@ git pull origin main
 dir deploy\k8s
 .venv\Scripts\activate.bat
 pytest
-docker build -t timothypaulschmidt/ai-assistant:v0.2.0 .
+docker build -t timothypaulschmidt/ai-assistant:v0.2.1 .
 docker login
-docker push timothypaulschmidt/ai-assistant:v0.2.0
+docker push timothypaulschmidt/ai-assistant:v0.2.1
 ```
 
 `dir` must list `kustomization.yaml`, `namespace.yaml`, `app` and `ollama`. The tag you
@@ -54,7 +54,7 @@ Check that anyone can pull it (this should work after `docker logout`):
 
 ```bat
 docker logout
-docker pull timothypaulschmidt/ai-assistant:v0.2.0
+docker pull timothypaulschmidt/ai-assistant:v0.2.1
 ```
 
 Also confirm the Ollama tag in `kustomization.yaml` exists (it prints JSON if it does):
@@ -139,8 +139,8 @@ be slower).
 2. Build and push the new tag, **before** touching the cluster (use the `newTag` value from
    `deploy/k8s/kustomization.yaml`):
    ```bat
-   docker build -t timothypaulschmidt/ai-assistant:v0.2.0 .
-   docker push timothypaulschmidt/ai-assistant:v0.2.0
+   docker build -t timothypaulschmidt/ai-assistant:v0.2.1 .
+   docker push timothypaulschmidt/ai-assistant:v0.2.1
    ```
 3. Copy the manifests: `scp -r deploy youruser@VM_IP:~/`
 4. On the VM:
