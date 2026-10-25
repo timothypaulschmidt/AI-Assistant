@@ -48,7 +48,12 @@ def test_streams_text_and_sends_expected_request():
 
     assert collect(provider(handler)) == ["Hel", "lo"]
     assert seen["auth"] == "Bearer secret"
-    assert seen["body"] == {"model": "m1", "messages": MSGS, "stream": True}
+    assert seen["body"] == {
+        "model": "m1",
+        "messages": MSGS,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
 
 
 def test_no_auth_header_when_no_key():
@@ -84,3 +89,42 @@ def test_connection_failure_is_status_zero_and_retryable():
     with pytest.raises(ProviderError) as info:
         collect(provider(handler))
     assert info.value.status == 0 and info.value.retryable
+
+
+def test_usage_chunk_is_reported_even_with_empty_choices():
+    from ai_assistant.llm.providers import Usage
+
+    body = sse_body("Hi") .replace(
+        b"data: [DONE]",
+        ("data: " + json.dumps({"choices": [], "usage": {"prompt_tokens": 7, "completion_tokens": 3}}) + "\n\ndata: [DONE]").encode(),
+    )
+    items = collect(provider(lambda r: httpx.Response(200, content=body)))
+    assert items == ["Hi", Usage(7, 3)]
+
+
+def test_server_rejecting_stream_options_is_retried_once_without_it():
+    bodies = []
+
+    def handler(request):
+        payload = json.loads(request.content)
+        bodies.append(payload)
+        if "stream_options" in payload:
+            return httpx.Response(400, text="Unknown field stream_options")
+        return httpx.Response(200, content=sse_body("ok"))
+
+    p = provider(handler)
+    assert collect(p) == ["ok"]
+    assert collect(p) == ["ok"]          # remembered: no second failed attempt
+    assert [("stream_options" in b) for b in bodies] == [True, False, False]
+
+
+def test_other_400_errors_are_not_retried():
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        return httpx.Response(400, text="Please pass a valid API key")
+
+    with pytest.raises(ProviderError):
+        collect(provider(handler))
+    assert len(calls) == 1

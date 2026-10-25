@@ -38,7 +38,7 @@ import logging
 import time
 from typing import AsyncIterator, Callable
 
-from .providers import Messages, Provider, ProviderError
+from .providers import Messages, Provider, ProviderError, Usage
 
 log = logging.getLogger("ai_assistant.llm.router")
 
@@ -107,7 +107,8 @@ class ProviderRouter:
     async def stream(
         self, messages: Messages, mode: str = "auto", model: str | None = None
     ) -> AsyncIterator[dict]:
-        """Yields {"type": "provider", ...} once, then {"type": "token", ...}.
+        """Yields {"type": "provider", ...} once, then {"type": "token", ...}, then
+        {"type": "usage", ...} if the provider reported token counts.
 
         ``model`` (only with mode="gemini") pins the request to that one Gemini
         model. Errors are shown instead of falling back, so you can tell what
@@ -128,14 +129,25 @@ class ProviderRouter:
                 # True when auto mode had to use the local model
                 "fallback": mode == "auto" and is_local and bool(self.gemini),
             }
+            usage = None
             try:
                 async for text in provider.stream(messages):
+                    if isinstance(text, Usage):
+                        usage = text
+                        continue
                     if not started:
                         started = True
                         yield announce
                     yield {"type": "token", "text": text}
                 if not started:  # provider answered with an empty stream
                     yield announce
+                if usage:
+                    yield {
+                        "type": "usage",
+                        "name": provider.name,
+                        "prompt_tokens": usage.prompt_tokens,
+                        "completion_tokens": usage.completion_tokens,
+                    }
                 return
             except ProviderError as exc:
                 if started:
