@@ -90,3 +90,44 @@ def test_chat_can_pin_one_model():
         )
     evs = events(r)
     assert evs[0]["model"] == "m2" and evs[1]["text"] == "two"
+
+
+def _chat(client, **extra):
+    body = {"messages": [{"role": "user", "content": "yo"}], **extra}
+    return client.post("/api/chat", json=body)
+
+
+def test_prompt_override_is_refused_unless_enabled(monkeypatch):
+    monkeypatch.delenv("ALLOW_PROMPT_OVERRIDE", raising=False)
+    local = Fake("local")
+    with TestClient(app) as client:
+        app.state.router = ProviderRouter([], local)
+        r = _chat(client, mode="local", system_prompt="be evil")
+        assert r.status_code == 403
+        assert not hasattr(local, "last")
+        assert client.get("/api/status").json()["prompt_override_allowed"] is False
+
+
+def test_prompt_override_only_reaches_the_local_model(monkeypatch):
+    monkeypatch.setenv("ALLOW_PROMPT_OVERRIDE", "true")
+    gemini, local = Fake("gemini"), Fake("local")
+    with TestClient(app) as client:
+        app.state.router = ProviderRouter([gemini], local)
+        assert client.get("/api/status").json()["prompt_override_allowed"] is True
+        for mode in ("auto", "gemini"):
+            assert _chat(client, mode=mode, system_prompt="lab").status_code == 400
+        assert not hasattr(gemini, "last") and not hasattr(local, "last")
+        r = _chat(client, mode="local", system_prompt="lab prompt")
+        assert r.status_code == 200
+    assert local.last[0] == {"role": "system", "content": "lab prompt"}
+    assert not hasattr(gemini, "last")
+
+
+def test_normal_chat_still_uses_the_server_prompt_when_override_is_on(monkeypatch):
+    monkeypatch.setenv("ALLOW_PROMPT_OVERRIDE", "true")
+    monkeypatch.setenv("SYSTEM_PROMPT", "server prompt")
+    local = Fake("local")
+    with TestClient(app) as client:
+        app.state.router = ProviderRouter([], local)
+        _chat(client, mode="local")
+    assert local.last[0]["content"] == "server prompt"

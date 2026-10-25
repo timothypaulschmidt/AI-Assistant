@@ -32,22 +32,29 @@ them before anything is created.
 
 ## 1. Build and push the image (Windows, `cmd`)
 
+First merge the pull request on GitHub (the deploy folder only reaches your PC
+after the merge), then get it:
+
 ```bat
 cd C:\Users\timschmidt\Documents\Projects\AI-Assistant
 git checkout main
 git pull origin main
+dir deploy\k8s
+.venv\Scripts\activate.bat
 pytest
-docker build -t ai-assistant:v0.1.0 .
-docker tag ai-assistant:v0.1.0 timothypaulschmidt/ai-assistant:v0.1.0
+docker build -t timothypaulschmidt/ai-assistant:v0.2.0 .
 docker login
-docker push timothypaulschmidt/ai-assistant:v0.1.0
+docker push timothypaulschmidt/ai-assistant:v0.2.0
 ```
+
+`dir` must list `kustomization.yaml`, `namespace.yaml`, `app` and `ollama`. The tag you
+push must match `newTag` in `deploy/k8s/kustomization.yaml`.
 
 Check that anyone can pull it (this should work after `docker logout`):
 
 ```bat
 docker logout
-docker pull timothypaulschmidt/ai-assistant:v0.1.0
+docker pull timothypaulschmidt/ai-assistant:v0.2.0
 ```
 
 Also confirm the Ollama tag in `kustomization.yaml` exists (it prints JSON if it does):
@@ -126,13 +133,26 @@ be slower).
 
 ## Day-to-day
 
-**Deploy a new version of the assistant**
+**Deploy a new version of the assistant** (the app is already running)
 
-1. Build, tag and push a new version (for example `v0.1.1`) as in step 1.
-2. Change `newTag` for `timothypaulschmidt/ai-assistant` in `deploy/k8s/kustomization.yaml`,
-   commit it, copy `deploy` to the VM again.
-3. `kubectl apply -k deploy/k8s`
-4. `kubectl -n ai-assistant rollout status deploy/ai-assistant`
+1. On Windows: merge the PR on GitHub, then `git checkout main` and `git pull origin main`.
+2. Build and push the new tag, **before** touching the cluster (use the `newTag` value from
+   `deploy/k8s/kustomization.yaml`):
+   ```bat
+   docker build -t timothypaulschmidt/ai-assistant:v0.2.0 .
+   docker push timothypaulschmidt/ai-assistant:v0.2.0
+   ```
+3. Copy the manifests: `scp -r deploy youruser@VM_IP:~/`
+4. On the VM:
+   ```bash
+   kubectl apply -k deploy/k8s --dry-run=server
+   kubectl apply -k deploy/k8s
+   kubectl -n ai-assistant rollout status deploy/ai-assistant
+   ```
+   Only what changed restarts. The assistant pod is replaced; Ollama and its models are untouched.
+5. Reload the page in your browser.
+
+The Gemini secret is not touched by any of this.
 
 **Roll back:** `kubectl -n ai-assistant rollout undo deploy/ai-assistant`
 
@@ -169,6 +189,37 @@ the models must be downloaded again.
 | Page says "Local: model … not pulled" | Step 7 not done, or `OLLAMA_MODEL` differs from what you pulled | Pull it, or fix `config.env` |
 | A Gemini model shows "not available to this key" | That model name does not exist for your key | Expected; it is skipped for an hour. Remove it from `GEMINI_MODELS` if you like |
 | Cannot open `:30080` | VM firewall, or wrong IP | `kubectl -n ai-assistant get svc`; try `curl http://localhost:30080/healthz` on the VM |
+
+## Prompt lab
+
+`ALLOW_PROMPT_OVERRIDE=true` in `deploy/k8s/app/config.env` shows a **Prompt lab** button in
+the page. A lab prompt replaces the system prompt for that chat, is sent to the **local model
+only** (the server refuses it for Gemini), and saved presets live in your browser, not in git
+or on the server. Set the value to `false` and apply to switch the feature off. With it off the
+server rejects any custom prompt, even from a hand-made request.
+
+## After a reboot
+
+Everything comes back by itself, as long as the VM itself starts:
+
+- k3s runs as a systemd service that is enabled at install. Check: `systemctl is-enabled k3s`
+  (should say `enabled`).
+- k3s restarts both pods, because they belong to Deployments. Allow 1 to 3 minutes. The images
+  are already on the VM, so nothing is downloaded.
+- The model volume and the Gemini Secret live on the VM's disk, so downloaded models and the key
+  survive. You do not pull the model again.
+- Not kept: Gemini cooldown timers (they reset, which is harmless) and any model loaded in RAM.
+  The first local answer after a boot is slower while Ollama loads the model.
+
+Check with `kubectl get nodes` and `kubectl -n ai-assistant get pods`. Right after boot
+`kubectl` may say the connection was refused for a minute. Wait and retry.
+
+Two things outside k3s can still stop you:
+
+- If the **ESXi host** reboots, the VM only starts on its own if autostart is on: in the ESXi
+  web UI go to Host, Manage, Autostart, and add the k3s VM.
+- If the VM gets a different IP after boot, `http://VM_IP:30080` stops working. Give it a static
+  IP or a DHCP reservation on your router.
 
 ## Security notes
 
