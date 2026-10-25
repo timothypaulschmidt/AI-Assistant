@@ -9,7 +9,7 @@ from typing import Literal
 
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -33,6 +33,9 @@ class ChatRequest(BaseModel):
     mode: Literal["auto", "gemini", "local"] = "auto"
     # With mode="gemini": pin the request to this one model from GEMINI_MODELS
     model: str | None = Field(default=None, max_length=100)
+    # Prompt lab: replaces SYSTEM_PROMPT for this request. Only accepted when
+    # ALLOW_PROMPT_OVERRIDE is on, and only with mode="local" (never sent to Gemini).
+    system_prompt: str | None = Field(default=None, max_length=8_000)
 
 
 def build_router(settings: Settings, client: httpx.AsyncClient) -> ProviderRouter:
@@ -124,6 +127,7 @@ async def status(request: Request):
         "local_model": settings.ollama_model,
         "local_reachable": local_reachable,
         "local_model_ready": local_model_ready,
+        "prompt_override_allowed": settings.allow_prompt_override,
     }
 
 
@@ -132,9 +136,23 @@ async def chat(req: ChatRequest, request: Request):
     settings: Settings = request.app.state.settings
     router: ProviderRouter = request.app.state.router
 
+    system_prompt = settings.system_prompt
+    if req.system_prompt is not None:
+        if not settings.allow_prompt_override:
+            return JSONResponse(
+                {"detail": "Custom system prompts are disabled (ALLOW_PROMPT_OVERRIDE)."},
+                status_code=403,
+            )
+        if req.mode != "local":
+            return JSONResponse(
+                {"detail": "Custom system prompts are only allowed with mode 'local'."},
+                status_code=400,
+            )
+        system_prompt = req.system_prompt
+
     messages = [m.model_dump() for m in req.messages]
-    if settings.system_prompt:
-        messages.insert(0, {"role": "system", "content": settings.system_prompt})
+    if system_prompt:
+        messages.insert(0, {"role": "system", "content": system_prompt})
 
     async def events():
         try:

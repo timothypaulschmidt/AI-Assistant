@@ -48,6 +48,9 @@ class Settings:
     # Seconds to wait for a response (CPU-only local models can be slow)
     request_timeout: float
     system_prompt: str
+    # Lets the browser send its own system prompt, for Local-only testing
+    # (the "Prompt lab"). Off unless you turn it on.
+    allow_prompt_override: bool
 
     @property
     def gemini_chat_url(self) -> str:
@@ -75,4 +78,6 @@ def load_settings() -> Settings:
         error_cooldown_seconds=float(env("GEMINI_ERROR_COOLDOWN_SECONDS", "60")),
         request_timeout=float(env("REQUEST_TIMEOUT", "180")),
         system_prompt=env("SYSTEM_PROMPT", "You are a helpful assistant."),
+        allow_prompt_override=env("ALLOW_PROMPT_OVERRIDE", "").strip().lower()
+        in ("1", "true", "yes", "on"),
     )
