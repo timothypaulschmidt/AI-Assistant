@@ -3,7 +3,7 @@ import asyncio
 import pytest
 
 from ai_assistant.config import DEFAULT_GEMINI_MODELS, parse_models
-from ai_assistant.llm.providers import ProviderError
+from ai_assistant.llm.providers import ProviderError, Usage
 from ai_assistant.llm.router import ProviderRouter
 
 MSGS = [{"role": "user", "content": "hi"}]
@@ -324,3 +324,15 @@ def run_pinned(router, model, mode="gemini"):
         return [e async for e in router.stream(MSGS, mode, model)]
 
     return asyncio.run(go())
+
+
+def test_usage_is_forwarded_after_the_tokens():
+    gemini = Fake("gemini", tokens=("a", "b", Usage(10, 2)))
+    router = ProviderRouter([gemini], Fake("local"))
+
+    async def go():
+        return [e async for e in router.stream(MSGS)]
+
+    events = asyncio.run(go())
+    assert [e["type"] for e in events] == ["provider", "token", "token", "usage"]
+    assert events[-1] == {"type": "usage", "name": "gemini", "prompt_tokens": 10, "completion_tokens": 2}

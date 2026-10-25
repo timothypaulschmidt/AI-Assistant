@@ -29,6 +29,9 @@
     padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel);
   }
   header h1 { font-size: 1rem; margin: 0; font-weight: 600; flex: 1 1 auto; }
+  .title { flex: 1 1 auto; min-width: 0; }
+  .title h1 { flex: none; }
+  .tokens { font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
   .status { font-size: .8rem; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
   .dot { display: inline-block; width: .55em; height: .55em; border-radius: 50%;
          background: var(--muted); margin-right: .35em; vertical-align: baseline; }
@@ -74,7 +77,11 @@
 </head>
 <body>
 <header>
-  <h1>AI Assistant</h1>
+  <div class="title">
+    <h1>AI Assistant</h1>
+    <div class="tokens" id="tokens" aria-live="off"
+         title="Tokens are the units models count. 'In' is everything sent each turn (the whole chat so far), so it grows as the chat gets longer. 'Today' is counted in this browser only. A leading ~ means the provider gave no count and it is estimated (about 4 characters per token)."></div>
+  </div>
   <div class="status" id="status" aria-live="polite"></div>
   <label>Model
     <select id="mode">
@@ -166,6 +173,33 @@ function addMessage(kind, who) {
   scrollEl.scrollTop = scrollEl.scrollHeight;
   return { el, who: w, body: b };
 }
+
+// ---- Token counter ---------------------------------------------------------
+// Exact counts come from the provider (usage event). If a provider sends none,
+// the reply is estimated at ~4 characters per token and shown with a "~".
+let chatTok = { inp: 0, out: 0, est: false };
+const todayKey = () => { const d = new Date(); return "tokens-" + d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate(); };
+function loadToday() { try { return JSON.parse(localStorage.getItem(todayKey()) || "{}"); } catch (_) { return {}; } }
+function addTokens(provider, inp, out, est) {
+  chatTok.inp += inp; chatTok.out += out; chatTok.est ||= est;
+  const t = loadToday(), k = provider === "gemini" ? "gemini" : "local";
+  t[k] = (t[k] || 0) + inp + out; if (est) t[k + "Est"] = true;
+  try {
+    localStorage.setItem(todayKey(), JSON.stringify(t));
+    for (let i = localStorage.length - 1; i >= 0; i--) {   // forget earlier days
+      const key = localStorage.key(i);
+      if (key && key.startsWith("tokens-") && key !== todayKey()) localStorage.removeItem(key);
+    }
+  } catch (_) {}
+}
+function renderTokens(liveOut = 0) {
+  const n = (v) => v.toLocaleString(), t = loadToday();
+  const mark = (est) => (est ? "~" : "");
+  const out = chatTok.out + liveOut;
+  $("tokens").textContent = "This chat: " + mark(chatTok.est || liveOut > 0) + n(chatTok.inp) + " in / " + mark(chatTok.est || liveOut > 0) + n(out) +
+    " out \u00b7 Today: Gemini " + mark(t.geminiEst) + n(t.gemini || 0) + " \u00b7 Local " + mark(t.localEst) + n(t.local || 0);
+}
+renderTokens();
 
 function setBusy(busy) {
   sendBtn.disabled = busy; stopBtn.hidden = !busy; modeSel.disabled = busy || labActive();
@@ -263,7 +297,7 @@ async function send(text) {
   history.push({ role: "user", content: text });
   addMessage("user", "You").body.textContent = text;
   const bot = addMessage("assistant", "…");
-  let reply = "", failed = false;
+  let reply = "", failed = false, gotUsage = false, provName = "local";
   controller = new AbortController();
   setBusy(true);
   try {
@@ -295,11 +329,14 @@ async function send(text) {
         const frame = buf.slice(0, i); buf = buf.slice(i + 2);
         if (!frame.startsWith("data:")) continue;
         const ev = JSON.parse(frame.slice(5).trim());
-        if (ev.type === "provider") {
+        if (ev.type === "usage") {
+          gotUsage = true; addTokens(ev.name, ev.prompt_tokens, ev.completion_tokens, false); renderTokens();
+        } else if (ev.type === "provider") {
+          provName = ev.name;
           bot.who.textContent = ev.name === "gemini" ? "Gemini · " + ev.model
             : "Local · " + ev.model + (ev.fallback ? " (fallback)" : "");
         } else if (ev.type === "token") {
-          reply += ev.text; bot.body.textContent = reply;
+          reply += ev.text; bot.body.textContent = reply; renderTokens(Math.ceil(reply.length / 4));
           scrollEl.scrollTop = scrollEl.scrollHeight;
         } else if (ev.type === "error") {
           failed = true; bot.el.classList.add("error");
@@ -318,6 +355,11 @@ async function send(text) {
   } finally {
     controller = null; setBusy(false); input.focus();
   }
+  if (reply && !gotUsage) {
+    const sent = history.reduce((sum, m) => sum + m.content.length, 0);
+    addTokens(provName, Math.ceil(sent / 4), Math.ceil(reply.length / 4), true);
+  }
+  renderTokens();
   if (reply) {
     history.push({ role: "assistant", content: reply });
   } else if (failed || !reply) {
@@ -344,7 +386,7 @@ input.addEventListener("input", autosize);
 stopBtn.addEventListener("click", () => controller && controller.abort());
 function newChat() {
   if (controller) controller.abort();
-  history = []; logEl.replaceChildren();
+  history = []; chatTok = { inp: 0, out: 0, est: false }; renderTokens(); logEl.replaceChildren();
   const e = document.createElement("div"); e.className = "empty"; e.id = "empty"; e.textContent = "Ask me anything.";
   logEl.append(e); input.focus();
 }

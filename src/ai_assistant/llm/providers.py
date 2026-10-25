@@ -8,11 +8,20 @@ protocol (vLLM, llama.cpp server, LM Studio, ...) is just another instance.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import AsyncIterator, Protocol
 
 import httpx
 
 Messages = list[dict[str, str]]
+
+
+@dataclass(frozen=True)
+class Usage:
+    """Token counts reported by the provider after an answer."""
+
+    prompt_tokens: int
+    completion_tokens: int
 
 
 class ProviderError(Exception):
@@ -40,7 +49,7 @@ class Provider(Protocol):
     name: str
     model: str
 
-    def stream(self, messages: Messages) -> AsyncIterator[str]: ...
+    def stream(self, messages: Messages) -> AsyncIterator[str | Usage]: ...
 
 
 class OpenAICompatProvider:
@@ -57,12 +66,28 @@ class OpenAICompatProvider:
         self.chat_url = chat_url
         self.model = model
         self.api_key = api_key
+        # Ask for token counts. If a server rejects the option, it is switched
+        # off once and the request retried, so chat never breaks over it.
+        self.include_usage = True
 
-    async def stream(self, messages: Messages) -> AsyncIterator[str]:
+    async def stream(self, messages: Messages) -> AsyncIterator[str | Usage]:
+        try:
+            async for item in self._stream(messages):
+                yield item
+        except ProviderError as exc:
+            if not (self.include_usage and exc.status == 400 and "stream_options" in str(exc).lower()):
+                raise
+            self.include_usage = False
+            async for item in self._stream(messages):
+                yield item
+
+    async def _stream(self, messages: Messages) -> AsyncIterator[str | Usage]:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         payload = {"model": self.model, "messages": messages, "stream": True}
+        if self.include_usage:
+            payload["stream_options"] = {"include_usage": True}
         try:
             async with self.client.stream(
                 "POST", self.chat_url, json=payload, headers=headers
@@ -80,6 +105,12 @@ class OpenAICompatProvider:
                         chunk = json.loads(data)
                     except json.JSONDecodeError:
                         continue
+                    usage = chunk.get("usage")
+                    if isinstance(usage, dict):
+                        prompt = usage.get("prompt_tokens")
+                        completion = usage.get("completion_tokens")
+                        if isinstance(prompt, int) and isinstance(completion, int):
+                            yield Usage(prompt, completion)
                     choices = chunk.get("choices") or []
                     if not choices:
                         continue
