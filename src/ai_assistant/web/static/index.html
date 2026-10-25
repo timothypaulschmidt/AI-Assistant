@@ -61,6 +61,13 @@
   .lab input[type=text] { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--border);
                           border-radius: 8px; padding: 5px 8px; flex: 1 1 10em; min-width: 0; }
   .lab small { color: var(--muted); }
+  .saved { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .saved li { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 2px 4px 2px 10px; }
+  .saved li.current { border-color: var(--accent); }
+  .saved .name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                 background: none; border: 0; text-align: left; padding: 4px 0; }
+  .saved .x { border: 0; background: none; color: var(--muted); font-size: 1.2rem; line-height: 1; padding: 2px 8px; }
+  .saved .x:hover, .saved .x:focus-visible { color: var(--bad); }
   .banner { background: var(--warn); color: #1c1b19; font-size: .8rem; padding: 4px 16px; text-align: center; }
   [hidden] { display: none !important; }
 </style>
@@ -88,6 +95,7 @@
       <button id="presetSave" type="button">Save</button>
       <button id="presetDelete" type="button">Delete</button>
     </div>
+    <ul class="saved" id="saved" aria-label="Saved prompts" hidden></ul>
     <textarea id="labText" maxlength="8000" aria-label="System prompt" placeholder="Write a prompt, give it a name, press Save"></textarea>
     <small>Lab prompts go to the local model only, never to Gemini. Saved presets live in this browser, not in git or on the server. Use fake data only. Changing the prompt starts a new chat.</small>
   </div>
@@ -187,6 +195,30 @@ function fillPresets(selected) {
   BUILTIN.forEach(([n], i) => add("b:" + i, n));
   Object.keys(loadSaved()).forEach((n) => add("s:" + n, n + " (saved)"));
   sel.value = [...sel.options].some((o) => o.value === selected) ? selected : "";
+  renderSaved();
+}
+// One row per saved prompt: click the name to use it, click the x to delete it.
+function renderSaved() {
+  const list = $("saved"), names = Object.keys(loadSaved());
+  list.hidden = names.length === 0;
+  list.replaceChildren(...names.map((n) => {
+    const li = document.createElement("li");
+    if ($("preset").value === "s:" + n) li.className = "current";
+    const use = document.createElement("button"); use.type = "button"; use.className = "name"; use.textContent = n;
+    use.addEventListener("click", () => { if (controller) return; $("preset").value = "s:" + n; $("preset").dispatchEvent(new Event("change")); });
+    const x = document.createElement("button"); x.type = "button"; x.className = "x"; x.textContent = "\u00d7";
+    x.title = "Delete \"" + n + "\""; x.setAttribute("aria-label", "Delete saved prompt " + n);
+    x.addEventListener("click", () => deleteSaved(n));
+    li.append(use, x); return li;
+  }));
+}
+function deleteSaved(name) {
+  if (controller) return;
+  if (!confirm("Delete saved prompt \"" + name + "\"?")) return;
+  const wasActive = $("preset").value === "s:" + name;
+  const saved = loadSaved(); delete saved[name]; storeSaved(saved);
+  if (wasActive) newChat();
+  fillPresets(wasActive ? "" : $("preset").value); if (wasActive) applyPreset();
 }
 function applyPreset() {
   const v = $("preset").value;
@@ -204,6 +236,7 @@ function syncLabUi() {
   else if (wanted_before !== null) { modeSel.value = wanted_before; wanted_before = null; selectWanted(); }
   modeSel.disabled = on || !!controller;
   $("presetDelete").disabled = !$("preset").value.startsWith("s:");
+  renderSaved();
 }
 $("preset").addEventListener("change", () => { newChat(); applyPreset(); });
 $("labText").addEventListener("input", () => { if (labActive()) labPrompt = $("labText").value; });
@@ -217,9 +250,7 @@ $("presetSave").addEventListener("click", () => {
   fillPresets("s:" + name); applyPreset();
 });
 $("presetDelete").addEventListener("click", () => {
-  const v = $("preset").value; if (!v.startsWith("s:")) return;
-  const saved = loadSaved(); delete saved[v.slice(2)]; storeSaved(saved);
-  newChat(); fillPresets(""); applyPreset();
+  const v = $("preset").value; if (v.startsWith("s:")) deleteSaved(v.slice(2));
 });
 function setLabAllowed(allowed) {
   if (allowed === labAllowed) return;
