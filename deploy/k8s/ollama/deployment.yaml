@@ -47,7 +47,10 @@ spec:
             failureThreshold: 6
           resources:
             requests:
-              cpu: "1"
+              # Kept small on purpose: Kubernetes reserves what is requested, and a
+              # 6 vCPU VM that also runs FortiAIGate ran out of schedulable CPU with
+              # "1" here. Ollama still uses every core it needs when it is busy.
+              cpu: 250m
               memory: 6Gi
             limits:
               # Stops one oversized model from starving the rest of the node.
