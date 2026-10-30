@@ -22,6 +22,38 @@ for matching names, labels, ports and settings, but they have not been applied
 to a cluster yet. Steps 4 and 6 below are dry runs that let the cluster check
 them before anything is created.
 
+## Environments
+
+| | QA | Production |
+|---|---|---|
+| Where | VMware, CPU only | AWS EC2 with an NVIDIA L40S GPU |
+| Linux user and home | `administrator`, `/home/administrator` | `ubuntu`, `/home/ubuntu` |
+| k3s (management) | `k3s-qa.fortinetlabs.com` | `k3s.fortinetlabs.com` |
+| AI Assistant | `https://ai-qa.fortinetlabs.com` | `https://ai.fortinetlabs.com` |
+| FortiAIGate | `https://faig-qa.fortinetlabs.com` | `https://faig.fortinetlabs.com` |
+| Apply with | `kubectl apply -k deploy/overlays/qa` | `kubectl apply -k deploy/overlays/prod` |
+
+Copy the manifests to the right machine:
+
+```bat
+scp -r deploy administrator@k3s-qa.fortinetlabs.com:/home/administrator
+scp -r -i FortiAIGate.pem deploy ubuntu@k3s.fortinetlabs.com:/home/ubuntu
+```
+
+`deploy/k8s` is the base and still works on its own (NodePort `:30080`, no HTTPS). The overlays
+add an HTTPS Ingress for the host above. Before the first apply of an overlay, on that cluster:
+
+1. Create the TLS Secret from your certificate files (keep them out of git):
+   ```bash
+   kubectl -n ai-assistant create secret tls wildcard-fortinetlabs-tls --cert=fullchain.pem --key=privkey.pem
+   ```
+   The namespace must exist first (`kubectl apply -f deploy/k8s/namespace.yaml`).
+2. Make sure the Traefik Middleware `default/redirect-https` exists. The FortiAIGate install
+   script creates it; otherwise the overlay's Ingress points at a middleware that is missing.
+
+Roll out QA first, check it, then production. The assistant has no login, so on production keep
+the security group limited to your own IP, and do not open the NodePort (30080).
+
 ## Before you start
 
 - k3s is running and `kubectl get nodes` works on the VM.
@@ -126,7 +158,7 @@ To try another model, pull it the same way and change `OLLAMA_MODEL` in
 
 ## 8. Open it
 
-Browse to `http://VM_IP:30080` from your Windows machine. The status line at the
+Browse to `http://VM_IP:30080` from your Windows machine (or the HTTPS name from the Environments table once an overlay is applied). The status line at the
 top should show Gemini ready and Local ready. Send a message with the dropdown on
 **Auto**, then once on **Local only** to prove the Ollama path works (expect it to
 be slower).

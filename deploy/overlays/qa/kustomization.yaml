@@ -1,0 +1,8 @@
+# qa: the base plus an HTTPS Ingress at https://ai-qa.fortinetlabs.com
+# Apply with:  kubectl apply -k deploy/overlays/qa
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../k8s
+  - ingress.yaml

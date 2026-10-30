@@ -1,0 +1,28 @@
+# Needs, before applying (see deploy/README.md, "Environments"):
+#   - the TLS Secret "wildcard-fortinetlabs-tls" in the ai-assistant namespace
+#     (created from your certificate files; never put those in git)
+#   - the Traefik Middleware default/redirect-https (the FortiAIGate install script creates it)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ai-assistant
+  namespace: ai-assistant
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.middlewares: default-redirect-https@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [ai-qa.fortinetlabs.com]
+      secretName: wildcard-fortinetlabs-tls
+  rules:
+    - host: ai-qa.fortinetlabs.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ai-assistant
+                port:
+                  name: http
