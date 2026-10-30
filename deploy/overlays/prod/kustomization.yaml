@@ -1,0 +1,8 @@
+# prod: the base plus an HTTPS Ingress at https://ai.fortinetlabs.com
+# Apply with:  kubectl apply -k deploy/overlays/prod
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../k8s
+  - ingress.yaml
