@@ -12,6 +12,6 @@ spec:
     app.kubernetes.io/name: ai-assistant
   ports:
     - name: http
-      port: 8000
+      port: 8080
       targetPort: http
       nodePort: 30080
