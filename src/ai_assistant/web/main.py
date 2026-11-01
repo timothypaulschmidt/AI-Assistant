@@ -16,7 +16,8 @@ from pydantic import BaseModel, Field
 from ..config import Settings, load_settings
 from ..llm.providers import OpenAICompatProvider, ProviderError
 from ..llm.router import ProviderRouter
-from ..mcp_client import McpError, list_tools
+from ..agent import run_chat
+from ..mcp_client import McpError, list_tools, load_tools
 
 log = logging.getLogger("ai_assistant.web")
 STATIC_DIR = Path(__file__).parent / "static"
@@ -37,6 +38,8 @@ class ChatRequest(BaseModel):
     # Prompt lab: replaces SYSTEM_PROMPT for this request. Only accepted when
     # ALLOW_PROMPT_OVERRIDE is on, and only with mode="local" (never sent to Gemini).
     system_prompt: str | None = Field(default=None, max_length=8_000)
+    # Let the model use the MCP server's tools for this request (needs MCP_SERVER_URL).
+    use_tools: bool = False
 
 
 def build_router(settings: Settings, client: httpx.AsyncClient) -> ProviderRouter:
@@ -160,13 +163,28 @@ async def chat(req: ChatRequest, request: Request):
             )
         system_prompt = req.system_prompt
 
+    if req.use_tools and not settings.mcp_enabled:
+        return JSONResponse(
+            {"detail": "MCP is not configured (set MCP_SERVER_URL)."}, status_code=400
+        )
+
     messages = [m.model_dump() for m in req.messages]
     if system_prompt:
         messages.insert(0, {"role": "system", "content": system_prompt})
 
     async def events():
         try:
-            async for event in router.stream(messages, req.mode, req.model):
+            tools = None
+            if req.use_tools:
+                try:
+                    tools = await load_tools(settings.mcp_server_url)
+                except McpError as exc:
+                    yield sse({"type": "error", "message": f"MCP server unavailable: {exc}"})
+                    yield sse({"type": "done"})
+                    return
+            async for event in run_chat(
+                router, messages, req.mode, req.model, tools, settings.mcp_max_rounds
+            ):
                 yield sse(event)
         except ProviderError as exc:
             yield sse({"type": "error", "message": str(exc)})

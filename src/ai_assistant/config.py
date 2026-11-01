@@ -54,6 +54,9 @@ class Settings:
     # MCP server the assistant can use for tools (Streamable HTTP endpoint, for
     # example http://localhost:8000/mcp). Empty = MCP is off.
     mcp_server_url: str
+    # Most model -> tool -> model rounds in one answer. Stops a confused (or
+    # attacked) model from looping forever and burning your quota.
+    mcp_max_rounds: int = 5
 
     @property
     def mcp_enabled(self) -> bool:
@@ -88,4 +91,5 @@ def load_settings() -> Settings:
         allow_prompt_override=env("ALLOW_PROMPT_OVERRIDE", "").strip().lower()
         in ("1", "true", "yes", "on"),
         mcp_server_url=env("MCP_SERVER_URL", "").strip(),
+        mcp_max_rounds=max(1, int(env("MCP_MAX_ROUNDS", "5"))),
     )

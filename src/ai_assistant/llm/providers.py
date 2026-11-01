@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import AsyncIterator, Protocol
+from typing import Any, AsyncIterator, Protocol
 
 import httpx
 
-Messages = list[dict[str, str]]
+# Chat messages. Plain ones have string values; with tools, assistant messages carry
+# a "tool_calls" list and "tool" messages carry a result, so values are not all strings.
+Messages = list[dict[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -22,6 +24,22 @@ class Usage:
 
     prompt_tokens: int
     completion_tokens: int
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    """The model asking for a tool to be run. Nothing has run yet.
+
+    ``arguments`` is the JSON text exactly as the model wrote it (it may be invalid:
+    small models get this wrong, so the caller must parse it defensively).
+    ``extra`` carries provider-specific data that must be sent back unchanged with
+    the tool result (Gemini's "thought signature" travels this way).
+    """
+
+    id: str
+    name: str
+    arguments: str
+    extra: dict | None = None
 
 
 class ProviderError(Exception):
@@ -49,7 +67,9 @@ class Provider(Protocol):
     name: str
     model: str
 
-    def stream(self, messages: Messages) -> AsyncIterator[str | Usage]: ...
+    def stream(
+        self, messages: Messages, tools: list[dict] | None = None
+    ) -> AsyncIterator[str | Usage | ToolCall]: ...
 
 
 class OpenAICompatProvider:
@@ -70,24 +90,32 @@ class OpenAICompatProvider:
         # off once and the request retried, so chat never breaks over it.
         self.include_usage = True
 
-    async def stream(self, messages: Messages) -> AsyncIterator[str | Usage]:
+    async def stream(
+        self, messages: Messages, tools: list[dict] | None = None
+    ) -> AsyncIterator[str | Usage | ToolCall]:
         try:
-            async for item in self._stream(messages):
+            async for item in self._stream(messages, tools):
                 yield item
         except ProviderError as exc:
             if not (self.include_usage and exc.status == 400 and "stream_options" in str(exc).lower()):
                 raise
             self.include_usage = False
-            async for item in self._stream(messages):
+            async for item in self._stream(messages, tools):
                 yield item
 
-    async def _stream(self, messages: Messages) -> AsyncIterator[str | Usage]:
+    async def _stream(
+        self, messages: Messages, tools: list[dict] | None = None
+    ) -> AsyncIterator[str | Usage | ToolCall]:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         payload = {"model": self.model, "messages": messages, "stream": True}
         if self.include_usage:
             payload["stream_options"] = {"include_usage": True}
+        if tools:
+            payload["tools"] = tools
+        # Tool calls arrive as fragments; collect them by index, emit them whole at the end.
+        pending: dict[int, dict] = {}
         try:
             async with self.client.stream(
                 "POST", self.chat_url, json=payload, headers=headers
@@ -100,7 +128,7 @@ class OpenAICompatProvider:
                         continue
                     data = line[5:].strip()
                     if data == "[DONE]":
-                        return
+                        break
                     try:
                         chunk = json.loads(data)
                     except json.JSONDecodeError:
@@ -114,8 +142,49 @@ class OpenAICompatProvider:
                     choices = chunk.get("choices") or []
                     if not choices:
                         continue
-                    text = (choices[0].get("delta") or {}).get("content")
+                    delta = choices[0].get("delta") or {}
+                    for fragment in delta.get("tool_calls") or []:
+                        _merge_tool_fragment(pending, fragment)
+                    text = delta.get("content")
                     if text:
                         yield text
         except httpx.TransportError as exc:
             raise ProviderError(self.name, 0, f"{type(exc).__name__}: {exc}") from exc
+        for index in sorted(pending):
+            entry = pending[index]
+            if not entry["name"]:
+                continue
+            yield ToolCall(
+                entry["id"] or f"call_{index}",
+                entry["name"],
+                entry["args"].strip() or "{}",
+                entry["extra"],
+            )
+
+
+def _merge_tool_fragment(pending: dict[int, dict], fragment: dict) -> None:
+    """Add one streamed ``tool_calls`` fragment to the calls collected so far.
+
+    OpenAI-style servers send an ``index`` and spread the arguments over many chunks.
+    Some servers (Gemini, Ollama) send each call whole, and may omit the index; a
+    fragment that has an ``id`` then starts a new call, one without continues the last.
+    """
+    index = fragment.get("index")
+    if not isinstance(index, int):
+        if fragment.get("id") or not pending:
+            index = len(pending)
+        else:
+            index = max(pending)
+    entry = pending.setdefault(index, {"id": "", "name": "", "args": "", "extra": None})
+    if fragment.get("id"):
+        entry["id"] = fragment["id"]
+    function = fragment.get("function") or {}
+    if function.get("name"):
+        entry["name"] = function["name"]
+    args = function.get("arguments")
+    if isinstance(args, str):
+        entry["args"] += args
+    elif isinstance(args, dict):  # some servers send an object, not JSON text
+        entry["args"] = json.dumps(args)
+    if isinstance(fragment.get("extra_content"), dict):
+        entry["extra"] = fragment["extra_content"]
