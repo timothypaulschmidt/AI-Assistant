@@ -409,7 +409,10 @@ async function refreshStatus() {
     const l = !s.local_reachable ? ["bad", "Local: Ollama unreachable", ""]
       : !s.local_model_ready ? ["warn", "Local: model " + s.local_model + " not pulled", ""]
       : ["ok", "Local ready", ""];
-    box.replaceChildren(...[g, l].map(([cls, label, title]) => {
+    const m = !s.mcp_configured ? null
+      : !s.mcp_reachable ? ["bad", "MCP: server unreachable", s.mcp_error || ""]
+      : ["ok", "MCP ready (" + s.mcp_tools.length + " tools)", s.mcp_tools.join("\n")];
+    box.replaceChildren(...[g, l, m].filter(Boolean).map(([cls, label, title]) => {
       const span = document.createElement("span");
       if (title) span.title = title;
       const dot = document.createElement("span"); dot.className = "dot " + cls;

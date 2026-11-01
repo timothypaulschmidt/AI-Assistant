@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from ..config import Settings, load_settings
 from ..llm.providers import OpenAICompatProvider, ProviderError
 from ..llm.router import ProviderRouter
+from ..mcp_client import McpError, list_tools
 
 log = logging.getLogger("ai_assistant.web")
 STATIC_DIR = Path(__file__).parent / "static"
@@ -121,7 +122,16 @@ async def status(request: Request):
     except (httpx.HTTPError, ValueError):
         pass
 
+    mcp = {"mcp_configured": settings.mcp_enabled}
+    if settings.mcp_enabled:
+        try:
+            tools = await list_tools(settings.mcp_server_url, timeout=3.0)
+            mcp.update(mcp_reachable=True, mcp_tools=[t.name for t in tools])
+        except McpError as exc:
+            mcp.update(mcp_reachable=False, mcp_tools=[], mcp_error=str(exc))
+
     return {
+        **mcp,
         "gemini_configured": bool(router.gemini),
         "gemini_models": router.gemini_status(),
         "local_model": settings.ollama_model,
