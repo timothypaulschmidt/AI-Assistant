@@ -220,3 +220,60 @@ def test_chat_with_tools_end_to_end(monkeypatch):
     evs = parse(r)
     assert [e["type"] for e in evs] == ["tool_call", "tool_result", "token", "done"]
     assert evs[1]["content"] == "42"
+
+
+# ---- local model picker ----------------------------------------------------------
+
+class FakeLocal:
+    name = "local"
+
+    def __init__(self, model):
+        self.model = model
+
+    async def stream(self, messages):
+        yield f"answered by {self.model}"
+
+
+def ollama_with(models):
+    def handler(request):
+        assert request.url.path == "/api/tags"
+        return httpx.Response(200, json={"models": [{"name": m} for m in models]})
+
+    return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+
+def test_status_lists_the_pulled_ollama_models():
+    with TestClient(web.app) as client:
+        web.app.state.client = ollama_with(["qwen3:8b", "llama3.2:3b"])
+        s = client.get("/api/status").json()
+    assert s["local_models"] == ["llama3.2:3b", "qwen3:8b"] and s["local_reachable"]
+
+
+def test_chat_uses_the_chosen_local_model(monkeypatch):
+    monkeypatch.setattr(web, "OpenAICompatProvider", lambda name, client, url, model, key="": FakeLocal(model))
+    with TestClient(web.app) as client:
+        web.app.state.client = ollama_with(["qwen3:8b", "llama3.2:3b"])
+        web.app.state.router = ProviderRouter([], FakeLocal("llama3.2:3b"))
+        r = client.post("/api/chat", json={
+            "messages": [{"role": "user", "content": "x"}], "mode": "local", "local_model": "qwen3:8b"})
+        default = client.post("/api/chat", json={
+            "messages": [{"role": "user", "content": "x"}], "mode": "local"})
+    assert parse(r)[0]["model"] == "qwen3:8b"
+    assert parse(default)[0]["model"] == "llama3.2:3b"
+    assert web.app.state.router.local.model == "llama3.2:3b"  # the shared router is not changed
+
+
+def test_chat_rejects_a_model_ollama_has_not_pulled():
+    with TestClient(web.app) as client:
+        web.app.state.client = ollama_with(["llama3.2:3b"])
+        r = client.post("/api/chat", json={
+            "messages": [{"role": "user", "content": "x"}], "mode": "local", "local_model": "evil:70b"})
+    assert r.status_code == 400 and "not pulled" in r.json()["detail"]
+
+
+def test_picker_shares_gemini_cooldowns_with_the_main_router():
+    main_router = ProviderRouter([FakeLocal("g1")], FakeLocal("a"))
+    clone = main_router.with_local(FakeLocal("b"))
+    clone._block(clone.gemini[0], 60, "rate_limited")
+    assert main_router.gemini_status()[0]["state"] == "rate_limited"
+    assert clone.local.model == "b" and main_router.local.model == "a"

@@ -95,6 +95,9 @@
       <option value="local">Local only</option>
     </select>
   </label>
+  <label id="localLabel" hidden title="Which Ollama model answers when the local model is used">Local model
+    <select id="localModel"></select>
+  </label>
   <label id="toolsLabel" hidden title="Let the model call the MCP server's tools">
     <input type="checkbox" id="useTools"> MCP tools
   </label>
@@ -169,6 +172,22 @@ function syncModelOptions(models) {
     after.after(o); after = o;
   }
   selectWanted();
+}
+
+let localSignature = "";
+function syncLocalModels(names, def) {
+  $("localLabel").hidden = names.length === 0;
+  const signature = JSON.stringify([names, def]);
+  if (signature === localSignature) return;   // don't touch the list while it may be open
+  localSignature = signature;
+  const sel = $("localModel"), keep = sel.value;
+  sel.replaceChildren(...names.map((n) => {
+    const o = document.createElement("option");
+    o.value = n; o.textContent = n + (n === def || n === def + ":latest" ? " (default)" : "");
+    return o;
+  }));
+  sel.value = names.includes(keep) ? keep
+    : names.includes(def) ? def : names.includes(def + ":latest") ? def + ":latest" : (names[0] || "");
 }
 
 function addMessage(kind, who) {
@@ -317,6 +336,7 @@ async function send(text) {
         messages: history,
         mode: modeSel.value.startsWith("gemini:") ? "gemini" : modeSel.value,
         model: modeSel.value.startsWith("gemini:") ? modeSel.value.slice(7) : null,
+        local_model: $("localModel").value || null,
         use_tools: $("useTools").checked && !$("useTools").disabled,
         ...(labActive() ? { mode: "local", system_prompt: labPrompt } : {}),
       }),
@@ -423,6 +443,7 @@ async function refreshStatus() {
     const s = await (await fetch("/api/status")).json();
     const models = s.gemini_models || [];
     setLabAllowed(!!s.prompt_override_allowed);
+    syncLocalModels(s.local_models || [], s.local_model);
     syncModelOptions(models);
     const ready = models.filter((m) => m.state === "ready").length;
     const detail = models.map((m) => m.model + ": " + (m.state === "ready" ? "ready"
