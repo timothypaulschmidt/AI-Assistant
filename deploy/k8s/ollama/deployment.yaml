@@ -31,6 +31,11 @@ spec:
             # Keep a model in memory this long after the last request
             - name: OLLAMA_KEEP_ALIVE
               value: "10m"
+            # Context window in tokens. Ollama's default (4096) is too small once MCP tool
+            # definitions and tool results are in the conversation: the start of the
+            # conversation would be cut off silently. Larger = more RAM.
+            - name: OLLAMA_CONTEXT_LENGTH
+              value: "8192"
           volumeMounts:
             - name: models
               mountPath: /root/.ollama

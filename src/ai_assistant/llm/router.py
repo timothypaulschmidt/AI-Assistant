@@ -34,6 +34,7 @@ different models' text together.
 """
 from __future__ import annotations
 
+import copy
 import logging
 import time
 from typing import AsyncIterator, Callable
@@ -63,6 +64,14 @@ class ProviderRouter:
         self._clock = clock
         # model name -> (blocked until, reason)
         self._blocked: dict[str, tuple[float, str]] = {}
+
+    def with_local(self, local: Provider) -> "ProviderRouter":
+        """A copy that uses a different local provider (for example another Ollama
+        model chosen in the page). The copy shares this router's Gemini cooldown
+        state, so a rate limit seen through either one applies to both."""
+        clone = copy.copy(self)  # shallow: _blocked stays the same dict
+        clone.local = local
+        return clone
 
     # ---- per-model state -------------------------------------------------
 

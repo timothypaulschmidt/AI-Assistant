@@ -38,6 +38,9 @@ class ChatRequest(BaseModel):
     # Prompt lab: replaces SYSTEM_PROMPT for this request. Only accepted when
     # ALLOW_PROMPT_OVERRIDE is on, and only with mode="local" (never sent to Gemini).
     system_prompt: str | None = Field(default=None, max_length=8_000)
+    # With mode "local" (or an auto fallback): use this Ollama model instead of
+    # OLLAMA_MODEL. Must be one Ollama has pulled; checked against /api/tags.
+    local_model: str | None = Field(default=None, max_length=100)
     # Let the model use the MCP server's tools for this request (needs MCP_SERVER_URL).
     use_tools: bool = False
 
@@ -102,28 +105,30 @@ async def healthz():
     return {"ok": True}
 
 
-@app.get("/api/status")
-async def status(request: Request):
-    state = request.app.state
-    settings: Settings = state.settings
-    router: ProviderRouter = state.router
-
-    local_reachable = False
-    local_model_ready = False
+async def ollama_models(state, settings: Settings) -> list[str] | None:
+    """Names of the models Ollama has pulled, or None if Ollama can't be reached."""
     try:
         resp = await state.client.get(
             settings.ollama_base_url.rstrip("/") + "/api/tags",
             timeout=httpx.Timeout(3.0),
         )
         if resp.status_code == 200:
-            local_reachable = True
-            names = [m.get("name", "") for m in resp.json().get("models", [])]
-            wanted = settings.ollama_model
-            local_model_ready = any(
-                n == wanted or n == f"{wanted}:latest" for n in names
-            )
+            return [m.get("name", "") for m in resp.json().get("models", [])]
     except (httpx.HTTPError, ValueError):
         pass
+    return None
+
+
+@app.get("/api/status")
+async def status(request: Request):
+    state = request.app.state
+    settings: Settings = state.settings
+    router: ProviderRouter = state.router
+
+    names = await ollama_models(state, settings)
+    local_reachable = names is not None
+    wanted = settings.ollama_model
+    local_model_ready = any(n == wanted or n == f"{wanted}:latest" for n in names or [])
 
     mcp = {"mcp_configured": settings.mcp_enabled}
     if settings.mcp_enabled:
@@ -138,6 +143,7 @@ async def status(request: Request):
         "gemini_configured": bool(router.gemini),
         "gemini_models": router.gemini_status(),
         "local_model": settings.ollama_model,
+        "local_models": sorted(n for n in (names or []) if n),
         "local_reachable": local_reachable,
         "local_model_ready": local_model_ready,
         "prompt_override_allowed": settings.allow_prompt_override,
@@ -162,6 +168,20 @@ async def chat(req: ChatRequest, request: Request):
                 status_code=400,
             )
         system_prompt = req.system_prompt
+
+    if req.local_model and req.local_model != settings.ollama_model:
+        available = await ollama_models(request.app.state, settings)
+        if available is None:
+            return JSONResponse({"detail": "Ollama is unreachable."}, status_code=400)
+        if req.local_model not in available:
+            return JSONResponse(
+                {"detail": f"{req.local_model} is not pulled in Ollama."}, status_code=400
+            )
+        router = router.with_local(
+            OpenAICompatProvider(
+                "local", request.app.state.client, settings.ollama_chat_url, req.local_model
+            )
+        )
 
     if req.use_tools and not settings.mcp_enabled:
         return JSONResponse(
