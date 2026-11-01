@@ -285,3 +285,22 @@ The manifests use only standard Kubernetes, so they also run on full Kubernetes
 service, GPU settings, where Ollama lives) are meant to move into small Kustomize
 overlays. If Ollama runs on a separate GPU machine, leave out `k8s/ollama/` and
 set `OLLAMA_BASE_URL` in `config.env` to that machine's address.
+
+## MCP tools and the local model picker (v0.3.0)
+
+The assistant listens on port **8080** (container, Service and Dockerfile). The MCP server
+(separate repo, `Ai-Assistant-MCP-Server`) listens on **8000**, reachable only inside the
+cluster as `http://mcp-server:8000/mcp`. The QA overlay sets `MCP_SERVER_URL` and the default
+`OLLAMA_MODEL`; the production overlay leaves MCP off until you add the same two lines.
+
+Roll-out order on QA:
+
+1. Build and push the assistant image: `docker build -t timothypaulschmidt/ai-assistant:v0.3.0 .`
+   then `docker push timothypaulschmidt/ai-assistant:v0.3.0`. The tag must equal `newTag` in
+   `deploy/k8s/kustomization.yaml`.
+2. Copy `deploy` to the VM and `kubectl apply -k <copy>/overlays/qa`. This also raises
+   Ollama's context window to 8192 tokens, which restarts the Ollama pod (models stay on the volume).
+3. Pull the models you want in the dropdown, once per cluster:
+   `kubectl -n ai-assistant exec deploy/ollama -- ollama pull qwen3:8b` (and `qwen3:4b`, `llama3.2:3b`).
+4. Deploy the MCP server (see that repo's `deploy/README.md`).
+5. Open the page: the status bar should show **MCP ready (10 tools)**.

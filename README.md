@@ -30,7 +30,7 @@ $env:GEMINI_API_KEY = "paste-your-key-here"
 # Only needed once Ollama exists somewhere (VM IP shown as an example):
 $env:OLLAMA_BASE_URL = "http://192.168.1.50:11434"
 
-uvicorn ai_assistant.web.main:app --reload --port 8000
+uvicorn ai_assistant.web.main:app --reload --port 8080
 ```
 
 Same thing in `cmd.exe` (note `set` instead of `$env:`, and no quotes):
@@ -41,10 +41,10 @@ pip install -r requirements-dev.txt
 pip install -e .
 set GEMINI_API_KEY=paste-your-key-here
 set OLLAMA_BASE_URL=http://192.168.1.50:11434
-uvicorn ai_assistant.web.main:app --reload --port 8000
+uvicorn ai_assistant.web.main:app --reload --port 8080
 ```
 
-3. Open http://localhost:8000. The status line at the top shows whether Gemini
+3. Open http://localhost:8080. The status line at the top shows whether Gemini
    and the local model are ready. Without Ollama running, "Gemini only" works
    and the local status shows unreachable.
 
@@ -56,7 +56,7 @@ virtual environment. Run the tests with `pytest`.
 
 ```powershell
 docker build -t ai-assistant:dev .
-docker run --rm -p 8000:8000 `
+docker run --rm -p 8080:8080 `
   -e GEMINI_API_KEY=your-key `
   -e OLLAMA_BASE_URL=http://host.docker.internal:11434 `
   ai-assistant:dev
