@@ -38,7 +38,7 @@ import logging
 import time
 from typing import AsyncIterator, Callable
 
-from .providers import Messages, Provider, ProviderError, Usage
+from .providers import Messages, Provider, ProviderError, ToolCall, Usage
 
 log = logging.getLogger("ai_assistant.llm.router")
 
@@ -105,7 +105,11 @@ class ProviderRouter:
         return available + [self.local]
 
     async def stream(
-        self, messages: Messages, mode: str = "auto", model: str | None = None
+        self,
+        messages: Messages,
+        mode: str = "auto",
+        model: str | None = None,
+        tools: list[dict] | None = None,
     ) -> AsyncIterator[dict]:
         """Yields {"type": "provider", ...} once, then {"type": "token", ...}, then
         {"type": "usage", ...} if the provider reported token counts.
@@ -113,6 +117,9 @@ class ProviderRouter:
         ``model`` (only with mode="gemini") pins the request to that one Gemini
         model. Errors are shown instead of falling back, so you can tell what
         a specific model does.
+
+        With ``tools``, the model may answer with {"type": "tool_call", ...} events
+        instead of (or after) text. Those count as output for failover purposes.
         """
         if mode not in MODES:
             raise ValueError(f"unknown mode: {mode}")
@@ -131,13 +138,23 @@ class ProviderRouter:
             }
             usage = None
             try:
-                async for text in provider.stream(messages):
+                stream = provider.stream(messages, tools) if tools else provider.stream(messages)
+                async for text in stream:
                     if isinstance(text, Usage):
                         usage = text
                         continue
                     if not started:
                         started = True
                         yield announce
+                    if isinstance(text, ToolCall):
+                        yield {
+                            "type": "tool_call",
+                            "id": text.id,
+                            "name": text.name,
+                            "arguments": text.arguments,
+                            "extra": text.extra,
+                        }
+                        continue
                     yield {"type": "token", "text": text}
                 if not started:  # provider answered with an empty stream
                     yield announce

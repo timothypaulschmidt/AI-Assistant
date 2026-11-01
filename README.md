@@ -80,7 +80,8 @@ pull a model, update and roll back) are in [deploy/README.md](deploy/README.md).
 | `GEMINI_MODELS` | `gemini-3.6-flash,gemini-flash-latest,gemini-4-argon,gemini-3.8-flash,gemini-3.5-flash-lite,gemini-3.1-pro-preview` | Comma-separated, tried in this order, then the local model |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Where Ollama listens (no `/v1`) |
 | `OLLAMA_MODEL` | `llama3.2:3b` | Must be pulled: `ollama pull llama3.2:3b` |
-| `MCP_SERVER_URL` | *(empty = MCP off)* | MCP server endpoint, e.g. `http://localhost:8000/mcp`. This step only connects and lists tools; calling them comes next |
+| `MCP_SERVER_URL` | *(empty = MCP off)* | MCP server endpoint, e.g. `http://localhost:8000/mcp`. When set, a **MCP tools** checkbox appears in the page |
+| `MCP_MAX_ROUNDS` | `5` | Most model -> tool -> model rounds per answer (stops runaway loops) |
 | `GEMINI_COOLDOWN_SECONDS` | `300` | Skip a Gemini model this long after it returns 429 |
 | `GEMINI_UNAVAILABLE_SECONDS` | `3600` | Skip a Gemini model this long after it returns 404 |
 | `GEMINI_ERROR_COOLDOWN_SECONDS` | `60` | Skip a model after a 5xx, or all Gemini models after a connection failure |
