@@ -51,6 +51,13 @@ class Settings:
     # Lets the browser send its own system prompt, for Local-only testing
     # (the "Prompt lab"). Off unless you turn it on.
     allow_prompt_override: bool
+    # MCP server the assistant can use for tools (Streamable HTTP endpoint, for
+    # example http://localhost:8000/mcp). Empty = MCP is off.
+    mcp_server_url: str
+
+    @property
+    def mcp_enabled(self) -> bool:
+        return bool(self.mcp_server_url)
 
     @property
     def gemini_chat_url(self) -> str:
@@ -80,4 +87,5 @@ def load_settings() -> Settings:
         system_prompt=env("SYSTEM_PROMPT", "You are a helpful assistant."),
         allow_prompt_override=env("ALLOW_PROMPT_OVERRIDE", "").strip().lower()
         in ("1", "true", "yes", "on"),
+        mcp_server_url=env("MCP_SERVER_URL", "").strip(),
     )
