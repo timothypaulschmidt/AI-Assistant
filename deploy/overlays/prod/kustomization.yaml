@@ -6,3 +6,13 @@ kind: Kustomization
 resources:
   - ../../k8s
   - ingress.yaml
+
+# Prod settings, merged into the assistant's ConfigMap from deploy/k8s/app/config.env. Same as QA:
+#   MCP_SERVER_URL  the MCP server in this cluster (its Service name, port 8000)
+#   OLLAMA_MODEL    default local model; the page's "Local model" dropdown can switch
+configMapGenerator:
+  - name: ai-assistant-config
+    behavior: merge
+    literals:
+      - MCP_SERVER_URL=http://mcp-server:8000/mcp
+      - OLLAMA_MODEL=qwen3:8b
