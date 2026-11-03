@@ -3,7 +3,7 @@ your Windows PC, in Docker, and in k3s without code changes."""
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 # Tried in this order; the local model is always last. Names your key can't
 # use (404) are skipped automatically, so unknown models here are harmless.
@@ -25,6 +25,14 @@ def parse_models(raw: str) -> tuple[str, ...]:
         if name and name not in seen:
             seen.append(name)
     return tuple(seen)
+
+
+ROUTES = ("direct", "faig_model", "faig_all")
+ROUTE_LABELS = {
+    "direct": "Direct",
+    "faig_model": "Model via FortiAIGate",
+    "faig_all": "Model + MCP via FortiAIGate",
+}
 
 
 @dataclass(frozen=True)
@@ -57,6 +65,37 @@ class Settings:
     # Most model -> tool -> model rounds in one answer. Stops a confused (or
     # attacked) model from looping forever and burning your quota.
     mcp_max_rounds: int = 5
+    # FortiAIGate: the same things reached through the gateway. Empty until FortiAIGate is
+    # configured; a route that needs an empty one is refused.
+    faig_gemini_base_url: str = ""
+    faig_ollama_base_url: str = ""
+    faig_mcp_server_url: str = ""
+
+    def route_problem(self, route: str) -> str:
+        """Empty when the route can be used; otherwise what is missing."""
+        if route not in ROUTES:
+            return f"Unknown route {route!r}."
+        if route in ("faig_model", "faig_all") and not self.faig_ollama_base_url:
+            return "FortiAIGate is not configured for the model yet (FAIG_OLLAMA_BASE_URL is empty)."
+        if route == "faig_all" and not self.faig_mcp_server_url:
+            return "FortiAIGate is not configured for MCP yet (FAIG_MCP_SERVER_URL is empty)."
+        return ""
+
+    def for_route(self, route: str) -> "Settings":
+        """The settings to use on a route: the FortiAIGate addresses swapped in.
+        direct = as configured; faig_model = model through FortiAIGate, MCP direct;
+        faig_all = model and MCP through FortiAIGate. A provider with no FortiAIGate address
+        is switched off on a FortiAIGate route (Gemini) instead of going around the gateway."""
+        if route == "direct":
+            return self
+        changes = {"ollama_base_url": self.faig_ollama_base_url}
+        if self.faig_gemini_base_url:
+            changes["gemini_base_url"] = self.faig_gemini_base_url
+        else:
+            changes["gemini_api_key"] = ""
+        if route == "faig_all":
+            changes["mcp_server_url"] = self.faig_mcp_server_url
+        return replace(self, **changes)
 
     @property
     def mcp_enabled(self) -> bool:
@@ -92,4 +131,7 @@ def load_settings() -> Settings:
         in ("1", "true", "yes", "on"),
         mcp_server_url=env("MCP_SERVER_URL", "").strip(),
         mcp_max_rounds=max(1, int(env("MCP_MAX_ROUNDS", "5"))),
+        faig_gemini_base_url=env("FAIG_GEMINI_BASE_URL", "").strip(),
+        faig_ollama_base_url=env("FAIG_OLLAMA_BASE_URL", "").strip(),
+        faig_mcp_server_url=env("FAIG_MCP_SERVER_URL", "").strip(),
     )

@@ -8,12 +8,12 @@ from pathlib import Path
 from typing import Literal
 
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from ..config import Settings, load_settings
+from ..config import ROUTE_LABELS, Settings, load_settings
 from ..llm.providers import OpenAICompatProvider, ProviderError
 from ..llm.router import ProviderRouter
 from ..agent import run_chat
@@ -80,7 +80,9 @@ async def lifespan(app: FastAPI):
     )
     app.state.settings = settings
     app.state.client = client
-    app.state.router = build_router(settings, client)
+    app.state.router = build_router(settings, client)   # the direct route
+    app.state.route = "direct"
+    app.state.faig_routers = {}                          # built the first time a FortiAIGate route is used
     if not settings.gemini_api_key:
         log.warning("GEMINI_API_KEY not set: only the local model is available")
     yield
@@ -89,6 +91,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="AI Assistant", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+def active(state) -> tuple[Settings, ProviderRouter]:
+    """The settings and provider router for the current traffic route (direct, or through FortiAIGate)."""
+    route = state.route
+    if route == "direct":
+        return state.settings, state.router
+    settings = state.settings.for_route(route)
+    router = state.faig_routers.get(route)
+    if router is None:
+        router = state.faig_routers[route] = build_router(settings, state.client)
+    return settings, router
+
+
+class RouteRequest(BaseModel):
+    route: Literal["direct", "faig_model", "faig_all"]
 
 
 def sse(event: dict) -> str:
@@ -122,8 +140,7 @@ async def ollama_models(state, settings: Settings) -> list[str] | None:
 @app.get("/api/status")
 async def status(request: Request):
     state = request.app.state
-    settings: Settings = state.settings
-    router: ProviderRouter = state.router
+    settings, router = active(state)
 
     names = await ollama_models(state, settings)
     local_reachable = names is not None
@@ -140,6 +157,12 @@ async def status(request: Request):
 
     return {
         **mcp,
+        "route": {
+            "current": state.route,
+            "label": ROUTE_LABELS[state.route],
+            "model_configured": state.settings.route_problem("faig_model") == "",
+            "all_configured": state.settings.route_problem("faig_all") == "",
+        },
         "gemini_configured": bool(router.gemini),
         "gemini_models": router.gemini_status(),
         "local_model": settings.ollama_model,
@@ -150,10 +173,19 @@ async def status(request: Request):
     }
 
 
+@app.post("/api/route")
+async def set_route(body: RouteRequest, request: Request):
+    """Pick where this app's traffic goes. Called by the Scripted Pipeline menu, not by the page."""
+    problem = request.app.state.settings.route_problem(body.route)
+    if problem:
+        raise HTTPException(400, problem)
+    request.app.state.route = body.route
+    return {"route": body.route, "label": ROUTE_LABELS[body.route]}
+
+
 @app.post("/api/chat")
 async def chat(req: ChatRequest, request: Request):
-    settings: Settings = request.app.state.settings
-    router: ProviderRouter = request.app.state.router
+    settings, router = active(request.app.state)
 
     system_prompt = settings.system_prompt
     if req.system_prompt is not None:

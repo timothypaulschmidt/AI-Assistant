@@ -131,3 +131,45 @@ def test_normal_chat_still_uses_the_server_prompt_when_override_is_on(monkeypatc
         app.state.router = ProviderRouter([], local)
         _chat(client, mode="local")
     assert local.last[0]["content"] == "server prompt"
+
+
+def test_route_defaults_to_direct_and_refuses_unconfigured_faig(monkeypatch):
+    for k in ("FAIG_OLLAMA_BASE_URL", "FAIG_GEMINI_BASE_URL", "FAIG_MCP_SERVER_URL"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://127.0.0.1:9")
+    with TestClient(app) as client:
+        s = client.get("/api/status").json()
+        assert s["route"] == {"current": "direct", "label": "Direct",
+                              "model_configured": False, "all_configured": False}
+        assert client.post("/api/route", json={"route": "faig_model"}).status_code == 400
+        assert client.post("/api/route", json={"route": "faig_all"}).status_code == 400
+        assert client.post("/api/route", json={"route": "nonsense"}).status_code == 422
+        assert client.post("/api/route", json={"route": "direct"}).json()["route"] == "direct"
+
+
+def test_model_route_swaps_addresses_and_keeps_mcp_direct(monkeypatch):
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://127.0.0.1:9")
+    monkeypatch.setenv("MCP_SERVER_URL", "http://mcp.direct/mcp")
+    monkeypatch.setenv("FAIG_OLLAMA_BASE_URL", "http://faig.test/ollama")
+    monkeypatch.delenv("FAIG_MCP_SERVER_URL", raising=False)
+    with TestClient(app) as client:
+        assert client.post("/api/route", json={"route": "faig_model"}).json()["route"] == "faig_model"
+        s = app.state.settings.for_route("faig_model")
+        assert s.ollama_base_url == "http://faig.test/ollama"
+        assert s.mcp_server_url == "http://mcp.direct/mcp"           # MCP stays direct
+        assert client.get("/api/status").json()["route"]["current"] == "faig_model"
+        assert client.post("/api/route", json={"route": "faig_all"}).status_code == 400   # no MCP address yet
+
+
+def test_full_route_swaps_mcp_and_gemini_goes_off_without_a_faig_address(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setenv("FAIG_OLLAMA_BASE_URL", "http://faig.test/ollama")
+    monkeypatch.setenv("FAIG_MCP_SERVER_URL", "http://faig.test/mcp")
+    monkeypatch.delenv("FAIG_GEMINI_BASE_URL", raising=False)
+    with TestClient(app):
+        direct = app.state.settings
+        full = direct.for_route("faig_all")
+        assert full.mcp_server_url == "http://faig.test/mcp"
+        assert full.gemini_api_key == ""            # not sent around the gateway
+        assert direct.for_route("direct") is direct
+        assert direct.gemini_api_key == "k"         # the direct settings are untouched

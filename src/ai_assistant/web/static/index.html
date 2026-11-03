@@ -35,7 +35,7 @@
   .status { font-size: .8rem; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
   .dot { display: inline-block; width: .55em; height: .55em; border-radius: 50%;
          background: var(--muted); margin-right: .35em; vertical-align: baseline; }
-  .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
+  .dot.route { background: #2457d6; } .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
   select, button, textarea {
     font: inherit; color: var(--text); background: var(--panel);
     border: 1px solid var(--border); border-radius: 8px;
@@ -461,7 +461,9 @@ async function refreshStatus() {
     $("toolsLabel").hidden = !s.mcp_configured;
     $("useTools").disabled = !s.mcp_reachable;
     if (!s.mcp_reachable) $("useTools").checked = false;
-    box.replaceChildren(...[g, l, m].filter(Boolean).map(([cls, label, title]) => {
+    const t = s.route ? [s.route.current === "direct" ? "ok" : "route", "Traffic: " + s.route.label,
+      "Where the model and MCP traffic goes. Changed from the Scripted Pipeline menu."] : null;
+    box.replaceChildren(...[t, g, l, m].filter(Boolean).map(([cls, label, title]) => {
       const span = document.createElement("span");
       if (title) span.title = title;
       const dot = document.createElement("span"); dot.className = "dot " + cls;
