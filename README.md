@@ -81,6 +81,7 @@ pull a model, update and roll back) are in [deploy/README.md](deploy/README.md).
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Where Ollama listens (no `/v1`) |
 | `OLLAMA_MODEL` | `llama3.2:3b` | The default local model. Must be pulled: `ollama pull llama3.2:3b`. The page also has a **Local model** dropdown listing every model Ollama has pulled |
 | `MCP_SERVER_URL` | *(empty = MCP off)* | MCP server endpoint, e.g. `http://localhost:8000/mcp`. When set, a **MCP tools** checkbox appears in the page |
+| `FAIG_OLLAMA_BASE_URL`, `FAIG_GEMINI_BASE_URL`, `FAIG_MCP_SERVER_URL` | *(empty)* | The same model and MCP addresses reached through FortiAIGate. The **Traffic** route (`POST /api/route` with `direct`, `faig_model` = model only, or `faig_all` = model + MCP) is chosen from the Scripted Pipeline menu, shown read-only in the status row, and refused while the addresses it needs are empty. Gemini is switched off on a FortiAIGate route that has no `FAIG_GEMINI_BASE_URL`. A restart returns to Direct |
 | `MCP_MAX_ROUNDS` | `5` | Most model -> tool -> model rounds per answer (stops runaway loops) |
 | `GEMINI_COOLDOWN_SECONDS` | `300` | Skip a Gemini model this long after it returns 429 |
 | `GEMINI_UNAVAILABLE_SECONDS` | `3600` | Skip a Gemini model this long after it returns 404 |
