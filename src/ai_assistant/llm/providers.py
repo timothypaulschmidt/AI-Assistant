@@ -27,6 +27,14 @@ class Usage:
 
 
 @dataclass(frozen=True)
+class Reasoning:
+    """A piece of the model's "thinking", sent before (or between) answer text by reasoning
+    models. Shown to the person; never sent back to the model."""
+
+    text: str
+
+
+@dataclass(frozen=True)
 class ToolCall:
     """The model asking for a tool to be run. Nothing has run yet.
 
@@ -69,7 +77,7 @@ class Provider(Protocol):
 
     def stream(
         self, messages: Messages, tools: list[dict] | None = None
-    ) -> AsyncIterator[str | Usage | ToolCall]: ...
+    ) -> AsyncIterator[str | Usage | ToolCall | Reasoning]: ...
 
 
 class OpenAICompatProvider:
@@ -92,7 +100,7 @@ class OpenAICompatProvider:
 
     async def stream(
         self, messages: Messages, tools: list[dict] | None = None
-    ) -> AsyncIterator[str | Usage | ToolCall]:
+    ) -> AsyncIterator[str | Usage | ToolCall | Reasoning]:
         try:
             async for item in self._stream(messages, tools):
                 yield item
@@ -105,7 +113,7 @@ class OpenAICompatProvider:
 
     async def _stream(
         self, messages: Messages, tools: list[dict] | None = None
-    ) -> AsyncIterator[str | Usage | ToolCall]:
+    ) -> AsyncIterator[str | Usage | ToolCall | Reasoning]:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -145,6 +153,11 @@ class OpenAICompatProvider:
                     delta = choices[0].get("delta") or {}
                     for fragment in delta.get("tool_calls") or []:
                         _merge_tool_fragment(pending, fragment)
+                    # Reasoning models send their thinking in a separate field: "reasoning"
+                    # (Ollama, OpenRouter) or "reasoning_content" (vLLM, DeepSeek).
+                    thought = delta.get("reasoning") or delta.get("reasoning_content")
+                    if isinstance(thought, str) and thought:
+                        yield Reasoning(thought)
                     text = delta.get("content")
                     if text:
                         yield text

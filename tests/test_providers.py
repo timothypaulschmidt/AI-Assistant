@@ -128,3 +128,17 @@ def test_other_400_errors_are_not_retried():
     with pytest.raises(ProviderError):
         collect(provider(handler))
     assert len(calls) == 1
+
+
+def test_reasoning_fields_are_yielded_separately_from_the_answer():
+    from ai_assistant.llm.providers import Reasoning
+
+    def chunk(**delta):
+        return "data: " + json.dumps({"choices": [{"delta": delta}]}) + "\n"
+
+    body = (
+        chunk(reasoning="Let me ") + "\n" + chunk(reasoning_content="think.") + "\n"
+        + chunk(content="Hello") + "\n" + "data: [DONE]\n\n"
+    ).encode()
+    got = collect(provider(lambda request: httpx.Response(200, content=body)))
+    assert got == [Reasoning("Let me "), Reasoning("think."), "Hello"]

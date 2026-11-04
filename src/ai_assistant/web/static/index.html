@@ -54,6 +54,9 @@
   .tool summary { cursor: pointer; font-family: ui-monospace, monospace; overflow-wrap: anywhere; }
   .tool pre { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 16em; overflow: auto; }
   .tool.error pre { color: var(--bad); }
+  .thinking { font-size: .85rem; color: var(--muted); }
+  .thinking summary { cursor: pointer; }
+  .thinking pre { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; border-left: 2px solid var(--muted); padding-left: 10px; }
   .notice { font-size: .8rem; color: var(--muted); }
   .msg.user .body { background: var(--user); padding: 10px 14px; border-radius: 12px; align-self: flex-end; max-width: 85%; }
   .msg.user .who { align-self: flex-end; }
@@ -326,6 +329,7 @@ async function send(text) {
   const bot = addMessage("assistant", "…");
   let reply = "", failed = false, gotUsage = false, provName = "local";
   const toolEls = {};
+  let think = null;                      // the open "Thinking" block, if the model is thinking
   controller = new AbortController();
   setBusy(true);
   try {
@@ -365,10 +369,23 @@ async function send(text) {
           provName = ev.name;
           bot.who.textContent = ev.name === "gemini" ? "Gemini · " + ev.model
             : "Local · " + ev.model + (ev.fallback ? " (fallback)" : "");
+        } else if (ev.type === "reasoning") {
+          // The model's thinking, shown while it streams and folded away when the answer starts.
+          // textContent only: it is model output, never HTML.
+          if (!think) {
+            const d = document.createElement("details"); d.className = "thinking"; d.open = true;
+            const sm = document.createElement("summary"); sm.textContent = "Thinking\u2026";
+            const pre = document.createElement("pre");
+            d.append(sm, pre); bot.el.insertBefore(d, bot.body); think = { d, sm, pre };
+          }
+          think.pre.textContent += ev.text;
+          scrollEl.scrollTop = scrollEl.scrollHeight;
         } else if (ev.type === "token") {
+          if (think) { think.sm.textContent = "Thought process"; think.d.open = false; think = null; }
           reply += ev.text; bot.body.textContent = reply; renderTokens(Math.ceil(reply.length / 4));
           scrollEl.scrollTop = scrollEl.scrollHeight;
         } else if (ev.type === "tool_call") {
+          if (think) { think.sm.textContent = "Thought process"; think.d.open = false; think = null; }
           // textContent only: tool output is untrusted and must never be parsed as HTML
           const d = document.createElement("details"); d.className = "tool"; d.open = true;
           const sm = document.createElement("summary");
