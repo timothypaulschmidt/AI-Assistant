@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
@@ -186,6 +187,7 @@ async def status(request: Request):
 
     return {
         **mcp,
+        "version": os.environ.get("APP_VERSION", "dev"),   # set at image build time; "dev" when run from source
         "route": {
             "current": state.route,
             "label": ROUTE_LABELS[state.route],

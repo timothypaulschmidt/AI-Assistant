@@ -17,6 +17,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application
 COPY src ./src
 
+# The release version, shown on the page. The pipeline passes it: docker build --build-arg APP_VERSION=v0.7.0
+ARG APP_VERSION=dev
+ENV APP_VERSION=$APP_VERSION
+
 # Run application as an unprivileged user
 RUN useradd --system --uid 10001 appuser
 USER appuser
