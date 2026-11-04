@@ -268,3 +268,12 @@ def test_chat_through_the_gateway_sends_gateway_names_and_the_gateway_key(monkey
     assert posts == [("google-gemini-3.6-flash", "Bearer faig-key"),
                      ("ollama-qwen3-4b", "Bearer faig-key"),
                      ("ollama-qwen3-8b", "Bearer faig-key")]
+
+
+def test_status_reports_the_release_version(monkeypatch):
+    monkeypatch.setenv("APP_VERSION", "v9.9.9")
+    with TestClient(app) as client:
+        assert client.get("/api/status").json()["version"] == "v9.9.9"
+    monkeypatch.delenv("APP_VERSION")
+    with TestClient(app) as client:
+        assert client.get("/api/status").json()["version"] == "dev"
