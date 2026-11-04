@@ -37,6 +37,11 @@ spec:
                 #   kubectl -n ai-assistant create secret generic gemini-api-key \
                 #     --from-literal=GEMINI_API_KEY=...
                 name: gemini-api-key
+            - secretRef:
+                # FortiAIGate key (FAIG_API_KEY). Optional: only the FortiAIGate routes need it.
+                #   kubectl -n ai-assistant create secret generic faig-api-key --from-literal=FAIG_API_KEY=...
+                name: faig-api-key
+                optional: true
           readinessProbe:
             httpGet:
               path: /healthz

@@ -16,3 +16,8 @@ configMapGenerator:
     literals:
       - MCP_SERVER_URL=http://mcp-server:8000/mcp
       - OLLAMA_MODEL=qwen3:8b
+      # FortiAIGate (model only): the gateway's OpenAI namespace, the model name it publishes,
+      # and its lab certificate. Pick the route with the pipeline menu (route "model").
+      - FAIG_OLLAMA_BASE_URL=https://llm-gateway.fortiaigate:8080/ai/openai
+      - FAIG_OLLAMA_MODEL=ollama-qwen3-8b
+      - FAIG_VERIFY_TLS=false

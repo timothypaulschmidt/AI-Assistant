@@ -151,6 +151,7 @@ def test_model_route_swaps_addresses_and_keeps_mcp_direct(monkeypatch):
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://127.0.0.1:9")
     monkeypatch.setenv("MCP_SERVER_URL", "http://mcp.direct/mcp")
     monkeypatch.setenv("FAIG_OLLAMA_BASE_URL", "http://faig.test/ollama")
+    monkeypatch.setenv("FAIG_API_KEY", "faig-key")
     monkeypatch.delenv("FAIG_MCP_SERVER_URL", raising=False)
     with TestClient(app) as client:
         assert client.post("/api/route", json={"route": "faig_model"}).json()["route"] == "faig_model"
@@ -164,6 +165,7 @@ def test_model_route_swaps_addresses_and_keeps_mcp_direct(monkeypatch):
 def test_full_route_swaps_mcp_and_gemini_goes_off_without_a_faig_address(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "k")
     monkeypatch.setenv("FAIG_OLLAMA_BASE_URL", "http://faig.test/ollama")
+    monkeypatch.setenv("FAIG_API_KEY", "faig-key")
     monkeypatch.setenv("FAIG_MCP_SERVER_URL", "http://faig.test/mcp")
     monkeypatch.delenv("FAIG_GEMINI_BASE_URL", raising=False)
     with TestClient(app):
@@ -173,3 +175,40 @@ def test_full_route_swaps_mcp_and_gemini_goes_off_without_a_faig_address(monkeyp
         assert full.gemini_api_key == ""            # not sent around the gateway
         assert direct.for_route("direct") is direct
         assert direct.gemini_api_key == "k"         # the direct settings are untouched
+
+
+def test_model_route_needs_the_gateway_key(monkeypatch):
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://127.0.0.1:9")
+    monkeypatch.setenv("FAIG_OLLAMA_BASE_URL", "https://gw.test/ai/openai")
+    monkeypatch.delenv("FAIG_API_KEY", raising=False)
+    with TestClient(app) as client:
+        r = client.post("/api/route", json={"route": "faig_model"})
+        assert r.status_code == 400 and "FAIG_API_KEY" in r.json()["detail"]
+
+
+def test_gateway_route_uses_its_model_name_key_and_model_list(monkeypatch):
+    import httpx
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://127.0.0.1:9")
+    monkeypatch.setenv("OLLAMA_MODEL", "qwen3:8b")
+    monkeypatch.setenv("FAIG_OLLAMA_BASE_URL", "https://gw.test/ai/openai/")
+    monkeypatch.setenv("FAIG_OLLAMA_MODEL", "ollama-qwen3-8b")
+    monkeypatch.setenv("FAIG_API_KEY", "faig-key")
+    monkeypatch.setenv("FAIG_VERIFY_TLS", "false")
+    seen = []
+
+    def handler(request):
+        seen.append((request.method, str(request.url), request.headers.get("authorization")))
+        return httpx.Response(200, json={"data": [{"id": "ollama-qwen3-8b"}]})
+
+    with TestClient(app) as client:
+        app.state.faig_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        s = app.state.settings.for_route("faig_model")
+        assert s.ollama_chat_url == "https://gw.test/ai/openai/v1/chat/completions"
+        assert s.ollama_model == "ollama-qwen3-8b" and s.ollama_key == "faig-key"
+        assert app.state.settings.ollama_key == ""             # direct Ollama gets no key
+        assert app.state.settings.faig_verify_tls is False
+        assert client.post("/api/route", json={"route": "faig_model"}).status_code == 200
+        st = client.get("/api/status").json()
+        assert st["local_model"] == "ollama-qwen3-8b"
+        assert st["local_models"] == ["ollama-qwen3-8b"] and st["local_model_ready"] is True
+        assert seen == [("GET", "https://gw.test/ai/openai/v1/models", "Bearer faig-key")]
