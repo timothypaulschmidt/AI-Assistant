@@ -19,5 +19,7 @@ configMapGenerator:
       # FortiAIGate (model only): the gateway's OpenAI namespace, the model name it publishes,
       # and its lab certificate. Pick the route with the pipeline menu (route "model").
       - FAIG_OLLAMA_BASE_URL=https://llm-gateway.fortiaigate:8080/ai/openai
-      - FAIG_OLLAMA_MODEL=ollama-qwen3-8b
+      - FAIG_GEMINI_BASE_URL=https://llm-gateway.fortiaigate:8080/ai/openai/v1
+      # plain name (what the page shows and Direct uses) = the name FortiAIGate publishes
+      - FAIG_MODEL_MAP=qwen3:8b=ollama-qwen3-8b,qwen3:4b=ollama-qwen3-4b,llama3.2:3b=ollama-llama3.2-3b,gemini-3.6-flash=google-gemini-3.6-flash,gemini-3.5-flash-lite=google-gemini-3.5-flash-lite,gemini-3.5-flash=google-gemini-3.5-flash,gemini-robotics-er-2-preview=google-gemini-robotics-er-2-preview
       - FAIG_VERIFY_TLS=false

@@ -250,7 +250,7 @@ def test_status_lists_the_pulled_ollama_models():
 
 
 def test_chat_uses_the_chosen_local_model(monkeypatch):
-    monkeypatch.setattr(web, "OpenAICompatProvider", lambda name, client, url, model, key="": FakeLocal(model))
+    monkeypatch.setattr(web, "OpenAICompatProvider", lambda name, client, url, model, key="", wire_model="": FakeLocal(model))
     with TestClient(web.app) as client:
         web.app.state.client = ollama_with(["qwen3:8b", "llama3.2:3b"])
         web.app.state.router = ProviderRouter([], FakeLocal("llama3.2:3b"))
