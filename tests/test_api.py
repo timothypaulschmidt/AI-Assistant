@@ -186,29 +186,85 @@ def test_model_route_needs_the_gateway_key(monkeypatch):
         assert r.status_code == 400 and "FAIG_API_KEY" in r.json()["detail"]
 
 
-def test_gateway_route_uses_its_model_name_key_and_model_list(monkeypatch):
+def test_gateway_route_keeps_plain_names_and_maps_them_for_the_gateway(monkeypatch):
     import httpx
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://127.0.0.1:9")
     monkeypatch.setenv("OLLAMA_MODEL", "qwen3:8b")
+    monkeypatch.setenv("GEMINI_API_KEY", "google-key")
+    monkeypatch.setenv("GEMINI_MODELS", "gemini-3.6-flash,gemini-4-argon")
     monkeypatch.setenv("FAIG_OLLAMA_BASE_URL", "https://gw.test/ai/openai/")
-    monkeypatch.setenv("FAIG_OLLAMA_MODEL", "ollama-qwen3-8b")
+    monkeypatch.setenv("FAIG_GEMINI_BASE_URL", "https://gw.test/ai/openai/v1")
+    monkeypatch.setenv("FAIG_MODEL_MAP", "qwen3:8b=ollama-qwen3-8b,qwen3:4b=ollama-qwen3-4b,"
+                       "gemini-3.6-flash=google-gemini-3.6-flash")
     monkeypatch.setenv("FAIG_API_KEY", "faig-key")
     monkeypatch.setenv("FAIG_VERIFY_TLS", "false")
     seen = []
 
     def handler(request):
         seen.append((request.method, str(request.url), request.headers.get("authorization")))
-        return httpx.Response(200, json={"data": [{"id": "ollama-qwen3-8b"}]})
+        return httpx.Response(200, json={"data": [
+            {"id": "ollama-qwen3-8b"}, {"id": "ollama-qwen3-4b"},
+            {"id": "google-gemini-3.6-flash"}, {"id": "google-gemini-3-pro-image"}]})
 
     with TestClient(app) as client:
         app.state.faig_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-        s = app.state.settings.for_route("faig_model")
+        direct = app.state.settings
+        s = direct.for_route("faig_model")
         assert s.ollama_chat_url == "https://gw.test/ai/openai/v1/chat/completions"
-        assert s.ollama_model == "ollama-qwen3-8b" and s.ollama_key == "faig-key"
-        assert app.state.settings.ollama_key == ""             # direct Ollama gets no key
-        assert app.state.settings.faig_verify_tls is False
+        assert s.gemini_chat_url == "https://gw.test/ai/openai/v1/chat/completions"
+        assert s.ollama_model == "qwen3:8b"                                  # the page still sees plain names
+        assert s.wire_name("qwen3:8b") == "ollama-qwen3-8b"
+        assert s.wire_name("gemini-3.6-flash") == "google-gemini-3.6-flash"
+        assert direct.wire_name("qwen3:8b") == "qwen3:8b"                    # direct: unchanged
+        assert s.gemini_api_key == "faig-key" and direct.gemini_api_key == "google-key"
+        assert s.routable_gemini_models() == ("gemini-3.6-flash",)            # only what the gateway publishes
+        assert direct.routable_gemini_models() == ("gemini-3.6-flash", "gemini-4-argon")
+        assert s.ollama_key == "faig-key" and direct.ollama_key == ""
         assert client.post("/api/route", json={"route": "faig_model"}).status_code == 200
         st = client.get("/api/status").json()
-        assert st["local_model"] == "ollama-qwen3-8b"
-        assert st["local_models"] == ["ollama-qwen3-8b"] and st["local_model_ready"] is True
+        assert st["local_model"] == "qwen3:8b"
+        assert st["local_models"] == ["qwen3:4b", "qwen3:8b"]                 # plain names, no Gemini, no image model
+        assert st["local_model_ready"] is True
+        assert [g["model"] for g in st["gemini_models"]] == ["gemini-3.6-flash"]
         assert seen == [("GET", "https://gw.test/ai/openai/v1/models", "Bearer faig-key")]
+
+
+def test_old_faig_ollama_model_setting_still_maps_the_default_local_model(monkeypatch):
+    monkeypatch.setenv("OLLAMA_MODEL", "qwen3:8b")
+    monkeypatch.setenv("FAIG_OLLAMA_MODEL", "ollama-qwen3-8b")
+    monkeypatch.delenv("FAIG_MODEL_MAP", raising=False)
+    from ai_assistant.config import load_settings
+    assert load_settings().faig_model_map == {"qwen3:8b": "ollama-qwen3-8b"}
+
+
+def test_chat_through_the_gateway_sends_gateway_names_and_the_gateway_key(monkeypatch):
+    import httpx
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://127.0.0.1:9")
+    monkeypatch.setenv("OLLAMA_MODEL", "qwen3:8b")
+    monkeypatch.setenv("GEMINI_API_KEY", "google-key")
+    monkeypatch.setenv("GEMINI_MODELS", "gemini-3.6-flash")
+    monkeypatch.setenv("FAIG_OLLAMA_BASE_URL", "https://gw.test/ai/openai")
+    monkeypatch.setenv("FAIG_GEMINI_BASE_URL", "https://gw.test/ai/openai/v1")
+    monkeypatch.setenv("FAIG_MODEL_MAP", "qwen3:8b=ollama-qwen3-8b,qwen3:4b=ollama-qwen3-4b,"
+                       "gemini-3.6-flash=google-gemini-3.6-flash")
+    monkeypatch.setenv("FAIG_API_KEY", "faig-key")
+    posts = []
+
+    def handler(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"data": [{"id": "ollama-qwen3-8b"}, {"id": "ollama-qwen3-4b"}]})
+        posts.append((json.loads(request.content)["model"], request.headers["authorization"]))
+        body = 'data: {"choices":[{"delta":{"content":"ok"}}]}\\n\\ndata: [DONE]\\n\\n'
+        return httpx.Response(200, content=body.encode())
+
+    with TestClient(app) as client:
+        app.state.faig_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        assert client.post("/api/route", json={"route": "faig_model"}).status_code == 200
+        ask = {"messages": [{"role": "user", "content": "hi"}]}
+        r1 = client.post("/api/chat", json={**ask, "mode": "gemini", "model": "gemini-3.6-flash"})
+        r2 = client.post("/api/chat", json={**ask, "mode": "local", "local_model": "qwen3:4b"})
+        r3 = client.post("/api/chat", json={**ask, "mode": "local"})
+    assert events(r1)[0]["model"] == "gemini-3.6-flash"                    # the page still sees the plain name
+    assert posts == [("google-gemini-3.6-flash", "Bearer faig-key"),
+                     ("ollama-qwen3-4b", "Bearer faig-key"),
+                     ("ollama-qwen3-8b", "Bearer faig-key")]

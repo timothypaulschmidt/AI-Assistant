@@ -55,11 +55,13 @@ def build_router(settings: Settings, client: httpx.AsyncClient) -> ProviderRoute
                 settings.gemini_chat_url,
                 model,
                 settings.gemini_api_key,
+                settings.wire_name(model),
             )
-            for model in settings.gemini_models
+            for model in settings.routable_gemini_models()
         ]
     local = OpenAICompatProvider(
-        "local", client, settings.ollama_chat_url, settings.ollama_model, settings.ollama_key
+        "local", client, settings.ollama_chat_url, settings.ollama_model, settings.ollama_key,
+        settings.wire_name(settings.ollama_model),
     )
     return ProviderRouter(
         gemini,
@@ -147,7 +149,14 @@ async def ollama_models(state, settings: Settings) -> list[str] | None:
                 timeout=httpx.Timeout(3.0),
             )
             if resp.status_code == 200:
-                return [m.get("id", "") for m in resp.json().get("data", [])]
+                # The gateway lists every provider's models under its own names. Show the plain
+                # names, and only the local ones: Gemini models are the Gemini side's business.
+                back = {wire: plain for plain, wire in settings.faig_model_map.items()}
+                return [
+                    back[m["id"]]
+                    for m in resp.json().get("data", [])
+                    if m.get("id") in back and back[m["id"]] not in settings.gemini_models
+                ]
         else:
             resp = await state.client.get(base + "/api/tags", timeout=httpx.Timeout(3.0))
             if resp.status_code == 200:
@@ -236,6 +245,7 @@ async def chat(req: ChatRequest, request: Request):
                 settings.ollama_chat_url,
                 req.local_model,
                 settings.ollama_key,
+                settings.wire_name(req.local_model),
             )
         )
 
