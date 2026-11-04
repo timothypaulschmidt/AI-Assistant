@@ -39,7 +39,7 @@ import logging
 import time
 from typing import AsyncIterator, Callable
 
-from .providers import Messages, Provider, ProviderError, ToolCall, Usage
+from .providers import Messages, Provider, ProviderError, Reasoning, ToolCall, Usage
 
 log = logging.getLogger("ai_assistant.llm.router")
 
@@ -121,7 +121,8 @@ class ProviderRouter:
         tools: list[dict] | None = None,
     ) -> AsyncIterator[dict]:
         """Yields {"type": "provider", ...} once, then {"type": "token", ...}, then
-        {"type": "usage", ...} if the provider reported token counts.
+        {"type": "usage", ...} if the provider reported token counts. Reasoning models also
+        send {"type": "reasoning", ...} events (their thinking) before the answer.
 
         ``model`` (only with mode="gemini") pins the request to that one Gemini
         model. Errors are shown instead of falling back, so you can tell what
@@ -155,6 +156,9 @@ class ProviderRouter:
                     if not started:
                         started = True
                         yield announce
+                    if isinstance(text, Reasoning):
+                        yield {"type": "reasoning", "text": text.text}
+                        continue
                     if isinstance(text, ToolCall):
                         yield {
                             "type": "tool_call",

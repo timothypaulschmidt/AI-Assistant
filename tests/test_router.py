@@ -336,3 +336,13 @@ def test_usage_is_forwarded_after_the_tokens():
     events = asyncio.run(go())
     assert [e["type"] for e in events] == ["provider", "token", "token", "usage"]
     assert events[-1] == {"type": "usage", "name": "gemini", "prompt_tokens": 10, "completion_tokens": 2}
+
+
+def test_reasoning_becomes_its_own_event_and_is_not_part_of_the_answer():
+    from ai_assistant.llm.providers import Reasoning
+
+    local = Fake("local", tokens=(Reasoning("hmm"), "Hello"))
+    events = run(make([], local), "local")
+    assert [e["type"] for e in events] == ["provider", "reasoning", "token"]
+    assert events[1]["text"] == "hmm"
+    assert text(events) == "Hello"
