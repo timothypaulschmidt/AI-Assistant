@@ -9,11 +9,9 @@ from dataclasses import dataclass, replace
 # use (404) are skipped automatically, so unknown models here are harmless.
 DEFAULT_GEMINI_MODELS = (
     "gemini-3.6-flash",
-    "gemini-flash-latest",
-    "gemini-4-argon",
-    "gemini-3.8-flash",
     "gemini-3.5-flash-lite",
-    "gemini-3.1-pro-preview",
+    "gemini-3.5-flash",
+    "gemini-robotics-er-2-preview",
 )
 
 

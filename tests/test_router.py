@@ -264,11 +264,9 @@ def test_no_gemini_key_uses_local_in_auto_and_errors_in_gemini_mode():
 def test_default_model_order_is_as_requested():
     assert DEFAULT_GEMINI_MODELS == (
         "gemini-3.6-flash",
-        "gemini-flash-latest",
-        "gemini-4-argon",
-        "gemini-3.8-flash",
         "gemini-3.5-flash-lite",
-        "gemini-3.1-pro-preview",
+        "gemini-3.5-flash",
+        "gemini-robotics-er-2-preview",
     )
 
 

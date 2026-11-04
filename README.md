@@ -77,7 +77,7 @@ pull a model, update and roll back) are in [deploy/README.md](deploy/README.md).
 | Variable | Default | Meaning |
 |---|---|---|
 | `GEMINI_API_KEY` | (empty) | Without it, only the local model is used |
-| `GEMINI_MODELS` | `gemini-3.6-flash,gemini-flash-latest,gemini-4-argon,gemini-3.8-flash,gemini-3.5-flash-lite,gemini-3.1-pro-preview` | Comma-separated, tried in this order, then the local model |
+| `GEMINI_MODELS` | `gemini-3.6-flash,gemini-3.5-flash-lite,gemini-3.5-flash,gemini-robotics-er-2-preview` | Comma-separated, tried in this order, then the local model |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Where Ollama listens (no `/v1`) |
 | `OLLAMA_MODEL` | `llama3.2:3b` | The default local model. Must be pulled: `ollama pull llama3.2:3b`. The page also has a **Local model** dropdown listing every model Ollama has pulled |
 | `MCP_SERVER_URL` | *(empty = MCP off)* | MCP server endpoint, e.g. `http://localhost:8000/mcp`. When set, a **MCP tools** checkbox appears in the page |
