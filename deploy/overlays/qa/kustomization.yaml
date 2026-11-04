@@ -21,5 +21,5 @@ configMapGenerator:
       - FAIG_OLLAMA_BASE_URL=https://llm-gateway.fortiaigate:8080/ai/openai
       - FAIG_GEMINI_BASE_URL=https://llm-gateway.fortiaigate:8080/ai/openai/v1
       # plain name (what the page shows and Direct uses) = the name FortiAIGate publishes
-      - FAIG_MODEL_MAP=qwen3:8b=ollama-qwen3-8b,qwen3:4b=ollama-qwen3-4b,llama3.2:3b=llama-lama3.2-3b,gemini-3.6-flash=google-gemini-3.6-flash,gemini-3.5-flash-lite=google-gemini-3.5-flash-lite,gemini-3.5-flash=google-gemini-3.5-flash,gemini-robotics-er-2-preview=google-gemini-robotics-er-2-preview
+      - FAIG_MODEL_MAP=qwen3:8b=ollama-qwen3-8b,qwen3:4b=ollama-qwen3-4b,llama3.2:3b=ollama-llama3.2-3b,gemini-3.6-flash=google-gemini-3.6-flash,gemini-3.5-flash-lite=google-gemini-3.5-flash-lite,gemini-3.5-flash=google-gemini-3.5-flash,gemini-robotics-er-2-preview=google-gemini-robotics-er-2-preview
       - FAIG_VERIFY_TLS=false
