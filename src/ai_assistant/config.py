@@ -70,6 +70,14 @@ class Settings:
     faig_gemini_base_url: str = ""
     faig_ollama_base_url: str = ""
     faig_mcp_server_url: str = ""
+    # How the model is reached through FortiAIGate. The gateway publishes models under its own
+    # names (provider slug + model, e.g. ollama-qwen3-8b) and wants its own API key.
+    faig_ollama_model: str = ""
+    faig_api_key: str = ""
+    # False = accept the gateway's self-signed lab certificate. Only used on FortiAIGate routes.
+    faig_verify_tls: bool = True
+    # Set by for_route(): the "local" model is served by the gateway, not by Ollama itself.
+    ollama_via_gateway: bool = False
 
     def route_problem(self, route: str) -> str:
         """Empty when the route can be used; otherwise what is missing."""
@@ -77,6 +85,8 @@ class Settings:
             return f"Unknown route {route!r}."
         if route in ("faig_model", "faig_all") and not self.faig_ollama_base_url:
             return "FortiAIGate is not configured for the model yet (FAIG_OLLAMA_BASE_URL is empty)."
+        if route in ("faig_model", "faig_all") and not self.faig_api_key:
+            return "FortiAIGate has no API key yet (FAIG_API_KEY is empty)."
         if route == "faig_all" and not self.faig_mcp_server_url:
             return "FortiAIGate is not configured for MCP yet (FAIG_MCP_SERVER_URL is empty)."
         return ""
@@ -88,7 +98,9 @@ class Settings:
         is switched off on a FortiAIGate route (Gemini) instead of going around the gateway."""
         if route == "direct":
             return self
-        changes = {"ollama_base_url": self.faig_ollama_base_url}
+        changes = {"ollama_base_url": self.faig_ollama_base_url, "ollama_via_gateway": True}
+        if self.faig_ollama_model:
+            changes["ollama_model"] = self.faig_ollama_model
         if self.faig_gemini_base_url:
             changes["gemini_base_url"] = self.faig_gemini_base_url
         else:
@@ -104,6 +116,11 @@ class Settings:
     @property
     def gemini_chat_url(self) -> str:
         return self.gemini_base_url.rstrip("/") + "/chat/completions"
+
+    @property
+    def ollama_key(self) -> str:
+        """Bearer key for the "local" model: the FortiAIGate key on a gateway route, none for plain Ollama."""
+        return self.faig_api_key if self.ollama_via_gateway else ""
 
     @property
     def ollama_chat_url(self) -> str:
@@ -134,4 +151,8 @@ def load_settings() -> Settings:
         faig_gemini_base_url=env("FAIG_GEMINI_BASE_URL", "").strip(),
         faig_ollama_base_url=env("FAIG_OLLAMA_BASE_URL", "").strip(),
         faig_mcp_server_url=env("FAIG_MCP_SERVER_URL", "").strip(),
+        faig_ollama_model=env("FAIG_OLLAMA_MODEL", "").strip(),
+        faig_api_key=env("FAIG_API_KEY", "").strip(),
+        faig_verify_tls=env("FAIG_VERIFY_TLS", "true").strip().lower()
+        not in ("0", "false", "no", "off"),
     )

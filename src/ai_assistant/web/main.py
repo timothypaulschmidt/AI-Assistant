@@ -59,7 +59,7 @@ def build_router(settings: Settings, client: httpx.AsyncClient) -> ProviderRoute
             for model in settings.gemini_models
         ]
     local = OpenAICompatProvider(
-        "local", client, settings.ollama_chat_url, settings.ollama_model
+        "local", client, settings.ollama_chat_url, settings.ollama_model, settings.ollama_key
     )
     return ProviderRouter(
         gemini,
@@ -80,6 +80,13 @@ async def lifespan(app: FastAPI):
     )
     app.state.settings = settings
     app.state.client = client
+    # Used on FortiAIGate routes only: same settings, but may accept the gateway's lab certificate.
+    app.state.faig_client = httpx.AsyncClient(
+        timeout=httpx.Timeout(settings.request_timeout, connect=5.0),
+        verify=settings.faig_verify_tls,
+    )
+    if not settings.faig_verify_tls:
+        log.warning("FAIG_VERIFY_TLS is off: the FortiAIGate certificate is not checked")
     app.state.router = build_router(settings, client)   # the direct route
     app.state.route = "direct"
     app.state.faig_routers = {}                          # built the first time a FortiAIGate route is used
@@ -87,10 +94,15 @@ async def lifespan(app: FastAPI):
         log.warning("GEMINI_API_KEY not set: only the local model is available")
     yield
     await client.aclose()
+    await app.state.faig_client.aclose()
 
 
 app = FastAPI(title="AI Assistant", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+def client_for(state, settings: Settings) -> httpx.AsyncClient:
+    return state.faig_client if settings.ollama_via_gateway else state.client
 
 
 def active(state) -> tuple[Settings, ProviderRouter]:
@@ -101,7 +113,7 @@ def active(state) -> tuple[Settings, ProviderRouter]:
     settings = state.settings.for_route(route)
     router = state.faig_routers.get(route)
     if router is None:
-        router = state.faig_routers[route] = build_router(settings, state.client)
+        router = state.faig_routers[route] = build_router(settings, state.faig_client)
     return settings, router
 
 
@@ -124,14 +136,22 @@ async def healthz():
 
 
 async def ollama_models(state, settings: Settings) -> list[str] | None:
-    """Names of the models Ollama has pulled, or None if Ollama can't be reached."""
+    """Names of the models Ollama has pulled (or, through FortiAIGate, the models the key may use),
+    or None if it can't be reached."""
     try:
-        resp = await state.client.get(
-            settings.ollama_base_url.rstrip("/") + "/api/tags",
-            timeout=httpx.Timeout(3.0),
-        )
-        if resp.status_code == 200:
-            return [m.get("name", "") for m in resp.json().get("models", [])]
+        base = settings.ollama_base_url.rstrip("/")
+        if settings.ollama_via_gateway:
+            resp = await client_for(state, settings).get(
+                base + "/v1/models",
+                headers={"Authorization": f"Bearer {settings.ollama_key}"},
+                timeout=httpx.Timeout(3.0),
+            )
+            if resp.status_code == 200:
+                return [m.get("id", "") for m in resp.json().get("data", [])]
+        else:
+            resp = await state.client.get(base + "/api/tags", timeout=httpx.Timeout(3.0))
+            if resp.status_code == 200:
+                return [m.get("name", "") for m in resp.json().get("models", [])]
     except (httpx.HTTPError, ValueError):
         pass
     return None
@@ -211,7 +231,11 @@ async def chat(req: ChatRequest, request: Request):
             )
         router = router.with_local(
             OpenAICompatProvider(
-                "local", request.app.state.client, settings.ollama_chat_url, req.local_model
+                "local",
+                client_for(request.app.state, settings),
+                settings.ollama_chat_url,
+                req.local_model,
+                settings.ollama_key,
             )
         )
 
