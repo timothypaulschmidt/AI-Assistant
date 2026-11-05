@@ -61,7 +61,7 @@
   .msg.user .body { background: var(--user); padding: 10px 14px; border-radius: 12px; align-self: flex-end; max-width: 85%; }
   .msg.user .who { align-self: flex-end; }
   .msg.error .body { color: var(--bad); }
-  .ver { max-width: 820px; margin: 6px auto 0; font-size: .7rem; color: var(--muted); }
+  .ver { font-size: .75rem; font-weight: 400; color: var(--muted); margin-left: 6px; }
   footer { border-top: 1px solid var(--border); background: var(--panel); padding: 12px 16px; }
   form { max-width: 820px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end; }
   textarea { flex: 1 1 auto; resize: none; padding: 10px 12px; max-height: 40vh; }
@@ -87,7 +87,7 @@
 <body>
 <header>
   <div class="title">
-    <h1>AI Assistant</h1>
+    <h1>AI Assistant <span class="ver" id="appVersion"></span></h1>
     <div class="tokens" id="tokens" aria-live="off"
          title="Tokens are the units models count. 'In' is everything sent each turn (the whole chat so far), so it grows as the chat gets longer. 'Today' is counted in this browser only. A leading ~ means the provider gave no count and it is estimated (about 4 characters per token)."></div>
   </div>
@@ -133,7 +133,6 @@
     <button id="stop" type="button" hidden>Stop</button>
     <button id="send" class="primary" type="submit">Send</button>
   </form>
-  <div class="ver" id="appVersion"></div>
 </footer>
 
 <script>
@@ -460,7 +459,7 @@ async function refreshStatus() {
   const box = $("status");
   try {
     const s = await (await fetch("/api/status")).json();
-    $("appVersion").textContent = "AI-Assistant " + (s.version || "");
+    $("appVersion").textContent = s.version ? "v" + String(s.version).replace(/^v/, "") : "";
     const models = s.gemini_models || [];
     setLabAllowed(!!s.prompt_override_allowed);
     syncLocalModels(s.local_models || [], s.local_model);
