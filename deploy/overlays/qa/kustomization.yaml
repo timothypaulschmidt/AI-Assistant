@@ -23,3 +23,21 @@ configMapGenerator:
       # plain name (what the page shows and Direct uses) = the name FortiAIGate publishes
       - FAIG_MODEL_MAP=qwen3:8b=ollama-qwen3-8b,qwen3:4b=ollama-qwen3-4b,llama3.2:3b=ollama-llama3.2-3b,gemini-3.6-flash=google-gemini-3.6-flash,gemini-3.5-flash-lite=google-gemini-3.5-flash-lite,gemini-3.5-flash=google-gemini-3.5-flash,gemini-robotics-er-2-preview=google-gemini-robotics-er-2-preview
       - FAIG_VERIFY_TLS=false
+
+# QA runs Ollama on CPU next to FortiAIGate, and loading qwen3:8b while two smaller models were still
+# resident hit the 24Gi container limit (the model worker was OOM-killed: "llama-server process has
+# terminated: signal: killed"). So: keep at most 2 models loaded (the oldest idle one is unloaded
+# when a third is asked for) and allow more headroom. Prod has a GPU and does not need this.
+patches:
+  - target:
+      kind: Deployment
+      name: ollama
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: OLLAMA_MAX_LOADED_MODELS
+          value: "2"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 32Gi
