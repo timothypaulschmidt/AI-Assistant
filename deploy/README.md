@@ -301,6 +301,6 @@ Roll-out order on QA:
 2. Copy `deploy` to the VM and `kubectl apply -k <copy>/overlays/qa`. This also raises
    Ollama's context window to 8192 tokens, which restarts the Ollama pod (models stay on the volume).
 3. Pull the models you want in the dropdown, once per cluster:
-   `kubectl -n ai-assistant exec deploy/ollama -- ollama pull qwen3:8b` (and `qwen3:4b`, `llama3.2:3b`).
+   `kubectl -n ai-assistant exec deploy/ollama -- ollama pull qwen3:8b` (and `llama3.2:3b`).
 4. Deploy the MCP server (see that repo's `deploy/README.md`).
 5. Open the page: the status bar should show **MCP ready (10 tools)**.

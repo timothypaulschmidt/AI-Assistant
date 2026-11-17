@@ -194,7 +194,7 @@ def test_gateway_route_keeps_plain_names_and_maps_them_for_the_gateway(monkeypat
     monkeypatch.setenv("GEMINI_MODELS", "gemini-3.6-flash,gemini-4-argon")
     monkeypatch.setenv("FAIG_OLLAMA_BASE_URL", "https://gw.test/ai/openai/")
     monkeypatch.setenv("FAIG_GEMINI_BASE_URL", "https://gw.test/ai/openai/v1")
-    monkeypatch.setenv("FAIG_MODEL_MAP", "qwen3:8b=ollama-qwen3-8b,qwen3:4b=ollama-qwen3-4b,"
+    monkeypatch.setenv("FAIG_MODEL_MAP", "qwen3:8b=ollama-qwen3-8b,llama3.2:3b=ollama-llama3.2-3b,"
                        "gemini-3.6-flash=google-gemini-3.6-flash")
     monkeypatch.setenv("FAIG_API_KEY", "faig-key")
     monkeypatch.setenv("FAIG_VERIFY_TLS", "false")
@@ -203,7 +203,7 @@ def test_gateway_route_keeps_plain_names_and_maps_them_for_the_gateway(monkeypat
     def handler(request):
         seen.append((request.method, str(request.url), request.headers.get("authorization")))
         return httpx.Response(200, json={"data": [
-            {"id": "ollama-qwen3-8b"}, {"id": "ollama-qwen3-4b"},
+            {"id": "ollama-qwen3-8b"}, {"id": "ollama-llama3.2-3b"},
             {"id": "google-gemini-3.6-flash"}, {"id": "google-gemini-3-pro-image"}]})
 
     with TestClient(app) as client:
@@ -223,7 +223,7 @@ def test_gateway_route_keeps_plain_names_and_maps_them_for_the_gateway(monkeypat
         assert client.post("/api/route", json={"route": "faig_model"}).status_code == 200
         st = client.get("/api/status").json()
         assert st["local_model"] == "qwen3:8b"
-        assert st["local_models"] == ["qwen3:4b", "qwen3:8b"]                 # plain names, no Gemini, no image model
+        assert st["local_models"] == ["llama3.2:3b", "qwen3:8b"]                 # plain names, no Gemini, no image model
         assert st["local_model_ready"] is True
         assert [g["model"] for g in st["gemini_models"]] == ["gemini-3.6-flash"]
         assert seen == [("GET", "https://gw.test/ai/openai/v1/models", "Bearer faig-key")]
@@ -245,14 +245,14 @@ def test_chat_through_the_gateway_sends_gateway_names_and_the_gateway_key(monkey
     monkeypatch.setenv("GEMINI_MODELS", "gemini-3.6-flash")
     monkeypatch.setenv("FAIG_OLLAMA_BASE_URL", "https://gw.test/ai/openai")
     monkeypatch.setenv("FAIG_GEMINI_BASE_URL", "https://gw.test/ai/openai/v1")
-    monkeypatch.setenv("FAIG_MODEL_MAP", "qwen3:8b=ollama-qwen3-8b,qwen3:4b=ollama-qwen3-4b,"
+    monkeypatch.setenv("FAIG_MODEL_MAP", "qwen3:8b=ollama-qwen3-8b,llama3.2:3b=ollama-llama3.2-3b,"
                        "gemini-3.6-flash=google-gemini-3.6-flash")
     monkeypatch.setenv("FAIG_API_KEY", "faig-key")
     posts = []
 
     def handler(request):
         if request.method == "GET":
-            return httpx.Response(200, json={"data": [{"id": "ollama-qwen3-8b"}, {"id": "ollama-qwen3-4b"}]})
+            return httpx.Response(200, json={"data": [{"id": "ollama-qwen3-8b"}, {"id": "ollama-llama3.2-3b"}]})
         posts.append((json.loads(request.content)["model"], request.headers["authorization"]))
         body = 'data: {"choices":[{"delta":{"content":"ok"}}]}\\n\\ndata: [DONE]\\n\\n'
         return httpx.Response(200, content=body.encode())
@@ -262,11 +262,11 @@ def test_chat_through_the_gateway_sends_gateway_names_and_the_gateway_key(monkey
         assert client.post("/api/route", json={"route": "faig_model"}).status_code == 200
         ask = {"messages": [{"role": "user", "content": "hi"}]}
         r1 = client.post("/api/chat", json={**ask, "mode": "gemini", "model": "gemini-3.6-flash"})
-        r2 = client.post("/api/chat", json={**ask, "mode": "local", "local_model": "qwen3:4b"})
+        r2 = client.post("/api/chat", json={**ask, "mode": "local", "local_model": "llama3.2:3b"})
         r3 = client.post("/api/chat", json={**ask, "mode": "local"})
     assert events(r1)[0]["model"] == "gemini-3.6-flash"                    # the page still sees the plain name
     assert posts == [("google-gemini-3.6-flash", "Bearer faig-key"),
-                     ("ollama-qwen3-4b", "Bearer faig-key"),
+                     ("ollama-llama3.2-3b", "Bearer faig-key"),
                      ("ollama-qwen3-8b", "Bearer faig-key")]
 
 
