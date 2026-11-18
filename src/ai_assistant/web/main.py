@@ -201,6 +201,9 @@ async def status(request: Request):
         "local_reachable": local_reachable,
         "local_model_ready": local_model_ready,
         "prompt_override_allowed": settings.allow_prompt_override,
+        # Shown read-only in the prompt lab so a demo audience can see the rule the model is meant to follow.
+        # Only sent when the lab is on: a normal deployment does not publish its system prompt.
+        "default_system_prompt": settings.system_prompt if settings.allow_prompt_override else None,
     }
 
 

@@ -105,7 +105,9 @@ def test_prompt_override_is_refused_unless_enabled(monkeypatch):
         r = _chat(client, mode="local", system_prompt="be evil")
         assert r.status_code == 403
         assert not hasattr(local, "last")
-        assert client.get("/api/status").json()["prompt_override_allowed"] is False
+        st = client.get("/api/status").json()
+        assert st["prompt_override_allowed"] is False
+        assert st["default_system_prompt"] is None             # a normal deployment does not publish its prompt
 
 
 def test_prompt_override_only_reaches_the_local_model(monkeypatch):
@@ -113,7 +115,9 @@ def test_prompt_override_only_reaches_the_local_model(monkeypatch):
     gemini, local = Fake("gemini"), Fake("local")
     with TestClient(app) as client:
         app.state.router = ProviderRouter([gemini], local)
-        assert client.get("/api/status").json()["prompt_override_allowed"] is True
+        st = client.get("/api/status").json()
+        assert st["prompt_override_allowed"] is True
+        assert st["default_system_prompt"] == "You are a helpful assistant."   # lab on: shown read-only on the page
         for mode in ("auto", "gemini"):
             assert _chat(client, mode=mode, system_prompt="lab").status_code == 400
         assert not hasattr(gemini, "last") and not hasattr(local, "last")
