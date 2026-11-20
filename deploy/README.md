@@ -230,6 +230,13 @@ only** (the server refuses it for Gemini), and saved presets live in your browse
 or on the server. Set the value to `false` and apply to switch the feature off. With it off the
 server rejects any custom prompt, even from a hand-made request.
 
+In the lab, the prompt list holds **Default (server prompt)**, three built-in demo prompts
+(**HR assistant**, **IT Help Desk Assistant**, **Customer Service Assistant**) and your saved
+prompts. You can type in the box on any of them. The name switches to **Custom (unsaved)**
+until you give it a name and press Save. To delete a saved prompt, pick its "Delete" entry at
+the bottom of the list. Clicking or typing in the chat folds the lab to one line so more of the
+chat shows; tick **Keep open** to stop that, or use Expand/Collapse.
+
 ## After a reboot
 
 Everything comes back by itself, as long as the VM itself starts:
